@@ -2,11 +2,13 @@ package BootstrapLayer;
 
 import ConfigurationLayer.Config;
 import DataLayer.MessageStore;
+import DataLayer.PostStore;
 import DataLayer.UserStore;
 import HandlerLayer.AdminHandler;
 import HandlerLayer.AuthHandler;
 import HandlerLayer.ChatHandler;
 import HandlerLayer.ImageHandler;
+import HandlerLayer.PostHandler;
 import HandlerLayer.ProfileHandler;
 import InfrastructureLayer.DatabaseManager;
 import InfrastructureLayer.SessionManager;
@@ -54,12 +56,14 @@ public class ChatServer {
         SessionManager sessions = new SessionManager();
         MessageStore store = new MessageStore(Config.MAX_HISTORY);
         SseManager sse = new SseManager();
+        PostStore postStore = new PostStore();
 
         AuthHandler authHandler = new AuthHandler(userStore, sessions);
         ChatHandler chatHandler = new ChatHandler(store, sse, sessions, userStore);
         ImageHandler imageHandler = new ImageHandler(sessions);
         ProfileHandler profileHandler = new ProfileHandler(userStore, sessions);
         AdminHandler adminHandler = new AdminHandler(userStore, store, sessions, sse);
+        PostHandler postHandler = new PostHandler(postStore, sessions, userStore);
 
         // 3. 创建 HTTPS 服务器
         HttpsServer server = HttpsServer.create(
@@ -95,6 +99,11 @@ public class ChatServer {
         server.createContext("/api/admin/deleteMessage",  adminHandler::handleDeleteMessage);
         server.createContext("/api/admin/deleteMessages", adminHandler::handleDeleteMessages);
         server.createContext("/api/admin/clearMessages",  adminHandler::handleClearMessages);
+
+        // 帖子模块：/posts（页面）、/api/posts（JSON 接口）
+        // 两者前缀不同，必须分别注册，否则 /api/posts/* 不会被 PostHandler 命中
+        server.createContext("/posts",     postHandler);
+        server.createContext("/api/posts", postHandler);
 
         // 5. 虚拟线程（每个请求一个虚拟线程，SSE 长连接不再占用固定线程池）
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());

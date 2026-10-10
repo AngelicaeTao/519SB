@@ -127,7 +127,7 @@ public class LoginPage {
             const r = await api('/api/login', { username, password });
             if (r.ok) {
               saveSession(r);
-              location.href = '/chat';
+              location.href = '/posts';
             } else {
               showMsg(r.msg || '登录失败', 'error');
             }
@@ -152,7 +152,7 @@ public class LoginPage {
             const loginRes = await api('/api/login', { username, password });
             if (loginRes.ok) {
               saveSession(loginRes);
-              location.href = '/chat';
+              location.href = '/posts';
             } else {
               showMsg('注册成功，但自动登录失败，请手动登录', 'error');
               document.querySelector('.tab[data-tab="login"]').click();

@@ -26,11 +26,15 @@ public class AuthHandler {
         this.sessions = sessions;
     }
 
+    /** 访问根路径：过门禁后跳转到论坛首页 */
     public void handleRoot(HttpExchange ex) throws IOException {
         if (!checkGate(ex)) {
             HttpUtil.sendHtml(ex, 200, GatePage.HTML);
         } else {
-            HttpUtil.sendHtml(ex, 200, LoginPage.HTML);
+            // 通过门禁 → 重定向到论坛首页
+            ex.getResponseHeaders().set("Location", "/posts");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
         }
     }
 

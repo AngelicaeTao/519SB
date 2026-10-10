@@ -76,6 +76,7 @@ public class WebPages {
         <div id="header">
           <span class="title">__SITE_TITLE__</span>
           <div class="right">
+            <a href="/posts" style="font-size:12px;padding:5px 10px;border:1px solid #07c160;background:#fff;color:#07c160;border-radius:6px;text-decoration:none;">帖子</a>
             <a id="admin-link" href="/admin" style="display:none;">管理</a>
             <a href="/profile" title="个人中心"><span class="my-avatar" id="my-avatar"></span></a>
             <span id="my-nickname"></span>
@@ -539,17 +540,13 @@ public class WebPages {
           var rect = img.getBoundingClientRect();
           var vw = window.innerWidth;
           var vh = window.innerHeight;
-          var margin = 80;    // 图片至少要有 80px 留在视口内
+          var margin = 80;
 
           var dx = 0, dy = 0;
 
-          // 图片右边缘太靠左 → 拉回来
           if (rect.right < margin) dx = margin - rect.right;
-          // 图片左边缘太靠右 → 拉回来
           if (rect.left > vw - margin) dx = (vw - margin) - rect.left;
-          // 图片下边缘太靠上 → 拉回来
           if (rect.bottom < margin) dy = margin - rect.bottom;
-          // 图片上边缘太靠下 → 拉回来
           if (rect.top > vh - margin) dy = (vh - margin) - rect.top;
 
           if (dx !== 0 || dy !== 0) {
@@ -566,12 +563,11 @@ public class WebPages {
           if (previewScale < previewMinScale) previewScale = previewMinScale;
           if (previewScale > previewMaxScale) previewScale = previewMaxScale;
           applyPreviewTransform(true);
-          // 缩放后检查图片是否跑出视口
           setTimeout(clampPreviewPosition, 120);
         }
 
         function onPreviewMouseDown(e) {
-          if (e.button !== 0) return;   // 只响应左键
+          if (e.button !== 0) return;
           dragging = true;
           dragStartX = e.clientX;
           dragStartY = e.clientY;
@@ -601,7 +597,6 @@ public class WebPages {
           if (e.target.id === 'image-preview') closePreview();
         }
 
-        // 绑定事件
         (function() {
           var img = document.getElementById('preview-img');
           img.addEventListener('dblclick', resetPreviewZoom);
@@ -609,7 +604,7 @@ public class WebPages {
           document.addEventListener('mousemove', onPreviewMouseMove);
           document.addEventListener('mouseup', onPreviewMouseUp);
         })();
-        
+
         // ==================== 发送 ====================
         async function sendText() {
           var text = input.value.trim();
