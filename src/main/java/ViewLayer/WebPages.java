@@ -28,12 +28,9 @@ public class WebPages {
           #loading-tip { text-align: center; color: #999; font-size: 12px; padding: 8px; display: none; }
           #loading-tip.show { display: block; }
 
-          /* 在线用户抽屉：默认隐藏，点击按钮滑入 */
           #sidebar {
             position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; right: 0; bottom: 0;
             width: 220px;
             background: #fff;
             border-left: 1px solid #e5e5e5;
@@ -55,14 +52,7 @@ public class WebPages {
           .online-user .avatar { width: 24px; height: 24px; border-radius: 50%; background: #bbb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; flex-shrink: 0; }
           .online-user .avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-          /* 遮罩：抽屉展开时点击可以关闭 */
-          #sidebar-mask {
-            position: absolute;
-            inset: 0;
-            background: rgba(0,0,0,0.15);
-            display: none;
-            z-index: 15;
-          }
+          #sidebar-mask { position: absolute; inset: 0; background: rgba(0,0,0,0.15); display: none; z-index: 15; }
           #sidebar-mask.show { display: block; }
 
           .msg { max-width: 78%; margin-bottom: 15px; display: flex; gap: 8px; position: relative; }
@@ -181,6 +171,7 @@ public class WebPages {
         var loadingHistory = false;
         var onlineUsers = [];
         var historyLoaded = false;
+        var lastOnlineSignature = '';
 
         function formatTimeNow() {
           var d = new Date();
@@ -227,7 +218,6 @@ public class WebPages {
           } catch (e) {}
         }
 
-        // ==================== 侧边栏切换 ====================
         function toggleSidebar(show) {
           if (typeof show === 'undefined') {
             show = !sidebar.classList.contains('show');
@@ -294,6 +284,13 @@ public class WebPages {
             return;
           }
 
+          // 在线列表变化（服务器推送）
+          if (data.type === 'online_list') {
+            onlineUsers = data.users || [];
+            renderOnlineUsers(onlineUsers);
+            return;
+          }
+
           if (data.type === 'kick') {
             alert(data.reason || '你已被管理员踢出');
             localStorage.clear();
@@ -312,7 +309,6 @@ public class WebPages {
             return;
           }
           appendMessage(data, false);
-          loadOnlineUsers();
 
           var isSelf = data.username === MY_USERNAME;
           if (!isSelf && !isFocused) {
@@ -449,18 +445,14 @@ public class WebPages {
           } catch (e) { alert('网络错误'); }
         }
 
-        async function loadOnlineUsers() {
-          try {
-            var res = await fetch('/online?token=' + encodeURIComponent(TOKEN));
-            var r = await res.json();
-            if (!r.ok) return;
-            onlineUsers = r.users;
-            renderOnlineUsers(r.users);
-          } catch (e) {}
-        }
-
+        // ==================== 在线用户渲染（由 SSE 事件驱动） ====================
         function renderOnlineUsers(users) {
           document.getElementById('online-count').textContent = users.length;
+
+          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || '') + ':' + (u.nickname || ''); }).join('|');
+          if (sig === lastOnlineSignature) return;
+          lastOnlineSignature = sig;
+
           var list = document.getElementById('online-list');
           list.innerHTML = '';
           if (users.length === 0) {
@@ -491,9 +483,6 @@ public class WebPages {
             list.appendChild(div);
           }
         }
-
-        loadOnlineUsers();
-        setInterval(loadOnlineUsers, 30000);
 
         // ==================== @ 下拉 ====================
         var mentionStart = -1;
@@ -566,7 +555,7 @@ public class WebPages {
           mentionDropdown.classList.add('show');
         }
 
-        // ==================== 图片预览 + 滚轮缩放 + 拖动 ====================
+        // ==================== 图片预览 ====================
         var previewScale = 1;
         var previewMinScale = 0.2;
         var previewMaxScale = 8;

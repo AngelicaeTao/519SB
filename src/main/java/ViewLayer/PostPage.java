@@ -3,7 +3,6 @@ package ViewLayer;
 /** 帖子页面：列表 + 详情 */
 public class PostPage {
 
-    // ---------------- 列表页 ----------------
     public static final String LIST_HTML = """
         <!doctype html>
         <html lang="zh-CN"><head><meta charset="utf-8">
@@ -37,12 +36,9 @@ public class PostPage {
           .post-card .meta { font-size: 12px; color: #999; display: flex; gap: 12px; }
           .empty { text-align: center; color: #999; padding: 40px; }
 
-          /* 在线用户抽屉 */
           #sidebar {
             position: fixed;
-            top: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; right: 0; bottom: 0;
             width: 220px;
             background: #fff;
             border-left: 1px solid #e5e5e5;
@@ -64,23 +60,14 @@ public class PostPage {
           .online-user .avatar { width: 24px; height: 24px; border-radius: 50%; background: #bbb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; flex-shrink: 0; }
           .online-user .avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-          #sidebar-mask {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.15);
-            display: none;
-            z-index: 150;
-          }
+          #sidebar-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.15); display: none; z-index: 150; }
           #sidebar-mask.show { display: block; }
 
           .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 300; padding: 20px; }
           .mask.show { display: flex; }
           .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
           .modal h3 { font-size: 16px; margin-bottom: 16px; color: #333; }
-          .modal input, .modal textarea {
-            width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit;
-            border: 1px solid #ddd; border-radius: 8px; outline: none; margin-bottom: 12px;
-          }
+          .modal input, .modal textarea { width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit; border: 1px solid #ddd; border-radius: 8px; outline: none; margin-bottom: 12px; }
           .modal input:focus, .modal textarea:focus { border-color: #07c160; }
           .modal textarea { min-height: 200px; resize: vertical; line-height: 1.6; }
           .modal-actions { display: flex; gap: 8px; margin-top: 8px; }
@@ -134,13 +121,11 @@ public class PostPage {
         const IS_ADMIN = localStorage.getItem('isAdmin') === 'true';
         if (!TOKEN) { location.href = '/login'; }
 
-        var ONLINE_REFRESH_INTERVAL = 10000;
         var lastOnlineSignature = '';
         var sidebar = document.getElementById('sidebar');
         var sidebarMask = document.getElementById('sidebar-mask');
         var onlineBtn = document.getElementById('online-btn');
 
-        // 顶部信息
         document.getElementById('my-nickname').textContent = MY_NICKNAME;
         if (IS_ADMIN) {
           var adminLink = document.getElementById('admin-link');
@@ -176,7 +161,6 @@ public class PostPage {
             sidebar.classList.add('show');
             sidebarMask.classList.add('show');
             onlineBtn.classList.add('active');
-            loadOnlineUsers();
           } else {
             sidebar.classList.remove('show');
             sidebarMask.classList.remove('show');
@@ -185,19 +169,10 @@ public class PostPage {
         }
         onlineBtn.onclick = function () { toggleSidebar(); };
 
-        async function loadOnlineUsers() {
-          try {
-            var res = await fetch('/online?token=' + encodeURIComponent(TOKEN));
-            var r = await res.json();
-            if (!r.ok) return;
-            renderOnlineUsers(r.users);
-          } catch (e) {}
-        }
-
         function renderOnlineUsers(users) {
           document.getElementById('online-count').textContent = users.length;
 
-          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || ''); }).join('|');
+          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || '') + ':' + (u.nickname || ''); }).join('|');
           if (sig === lastOnlineSignature) return;
           lastOnlineSignature = sig;
 
@@ -232,8 +207,29 @@ public class PostPage {
           }
         }
 
-        loadOnlineUsers();
-        setInterval(loadOnlineUsers, ONLINE_REFRESH_INTERVAL);
+        // ==================== 打开 SSE 长连接（用于在线列表推送 + 保持在线状态） ====================
+        var es = new EventSource('/events?token=' + encodeURIComponent(TOKEN));
+        es.onmessage = function (e) {
+          if (!e || !e.data || typeof e.data !== 'string') return;
+          var raw = e.data.trim();
+          if (raw.length === 0) return;
+
+          var data;
+          try { data = JSON.parse(raw); } catch (err) { return; }
+
+          // 只处理：在线列表变化、被踢
+          if (data.type === 'online_list') {
+            renderOnlineUsers(data.users || []);
+            return;
+          }
+          if (data.type === 'kick') {
+            alert(data.reason || '你已被管理员踢出');
+            localStorage.clear();
+            location.href = '/login';
+            return;
+          }
+          // 其他事件（消息、撤回等）在帖子页不处理
+        };
 
         // ==================== 帖子列表 ====================
         function fmtTime(ms) {
@@ -340,7 +336,6 @@ public class PostPage {
         </script></body></html>
         """;
 
-    // ---------------- 详情页 ----------------
     public static String detailHtml(long id) {
         return DETAIL_HTML.replace("__POST_ID__", String.valueOf(id));
     }
@@ -461,10 +456,7 @@ public class PostPage {
           .reply-op:hover { color: #07c160; background: #f0fff5; }
           .reply-op.del:hover { color: #ff5757; background: #fff0f0; }
 
-          .reply-form {
-            margin-top: 10px; padding: 12px;
-            background: #fafafa; border-radius: 10px;
-          }
+          .reply-form { margin-top: 10px; padding: 12px; background: #fafafa; border-radius: 10px; }
           .reply-form textarea {
             width: 100%; padding: 8px 10px; font-size: 13px; font-family: inherit;
             border: 1px solid #e0e0e0; border-radius: 8px; outline: none;
@@ -472,10 +464,7 @@ public class PostPage {
           }
           .reply-form textarea:focus { border-color: #07c160; }
           .reply-form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-          .reply-form-actions button {
-            padding: 6px 14px; font-size: 13px; border-radius: 6px; border: none;
-            cursor: pointer; font-family: inherit;
-          }
+          .reply-form-actions button { padding: 6px 14px; font-size: 13px; border-radius: 6px; border: none; cursor: pointer; font-family: inherit; }
           .btn-reply-cancel { background: #eee; color: #333; }
           .btn-reply-submit { background: #07c160; color: #fff; }
           .btn-reply-submit:hover { background: #06ad56; }
@@ -483,12 +472,9 @@ public class PostPage {
 
           .comment-empty { text-align: center; color: #bbb; padding: 30px; font-size: 14px; }
 
-          /* 在线用户抽屉 */
           #sidebar {
             position: fixed;
-            top: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; right: 0; bottom: 0;
             width: 220px;
             background: #fff;
             border-left: 1px solid #e5e5e5;
@@ -510,23 +496,14 @@ public class PostPage {
           .online-user .avatar { width: 24px; height: 24px; border-radius: 50%; background: #bbb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; flex-shrink: 0; }
           .online-user .avatar img { width: 100%; height: 100%; object-fit: cover; }
 
-          #sidebar-mask {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.15);
-            display: none;
-            z-index: 150;
-          }
+          #sidebar-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.15); display: none; z-index: 150; }
           #sidebar-mask.show { display: block; }
 
           .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 300; padding: 20px; }
           .mask.show { display: flex; }
           .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
           .modal h3 { font-size: 16px; margin-bottom: 16px; color: #333; }
-          .modal input, .modal textarea {
-            width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit;
-            border: 1px solid #ddd; border-radius: 8px; outline: none; margin-bottom: 12px;
-          }
+          .modal input, .modal textarea { width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit; border: 1px solid #ddd; border-radius: 8px; outline: none; margin-bottom: 12px; }
           .modal input:focus, .modal textarea:focus { border-color: #07c160; }
           .modal textarea { min-height: 200px; resize: vertical; line-height: 1.6; }
           .modal-actions { display: flex; gap: 8px; margin-top: 8px; }
@@ -614,15 +591,17 @@ public class PostPage {
         let currentPost = null;
         let allComments = [];
 
-        var ONLINE_REFRESH_INTERVAL = 10000;
         var lastOnlineSignature = '';
         var sidebar = document.getElementById('sidebar');
         var sidebarMask = document.getElementById('sidebar-mask');
         var onlineBtn = document.getElementById('online-btn');
 
-        // 顶部信息
         document.getElementById('my-nickname').textContent = MY_NICKNAME;
-        if (IS_ADMIN) document.getElementById('admin-link').style.display = 'inline-block';
+        if (IS_ADMIN) {
+          var adminLink = document.getElementById('admin-link');
+          adminLink.style.display = 'inline-block';
+          adminLink.href = '/admin?token=' + encodeURIComponent(TOKEN);
+        }
 
         function renderMyAvatar() {
           const el = document.getElementById('my-avatar');
@@ -652,7 +631,6 @@ public class PostPage {
             sidebar.classList.add('show');
             sidebarMask.classList.add('show');
             onlineBtn.classList.add('active');
-            loadOnlineUsers();
           } else {
             sidebar.classList.remove('show');
             sidebarMask.classList.remove('show');
@@ -661,19 +639,10 @@ public class PostPage {
         }
         onlineBtn.onclick = function () { toggleSidebar(); };
 
-        async function loadOnlineUsers() {
-          try {
-            var res = await fetch('/online?token=' + encodeURIComponent(TOKEN));
-            var r = await res.json();
-            if (!r.ok) return;
-            renderOnlineUsers(r.users);
-          } catch (e) {}
-        }
-
         function renderOnlineUsers(users) {
           document.getElementById('online-count').textContent = users.length;
 
-          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || ''); }).join('|');
+          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || '') + ':' + (u.nickname || ''); }).join('|');
           if (sig === lastOnlineSignature) return;
           lastOnlineSignature = sig;
 
@@ -708,8 +677,27 @@ public class PostPage {
           }
         }
 
-        loadOnlineUsers();
-        setInterval(loadOnlineUsers, ONLINE_REFRESH_INTERVAL);
+        // ==================== SSE ====================
+        var es = new EventSource('/events?token=' + encodeURIComponent(TOKEN));
+        es.onmessage = function (e) {
+          if (!e || !e.data || typeof e.data !== 'string') return;
+          var raw = e.data.trim();
+          if (raw.length === 0) return;
+
+          var data;
+          try { data = JSON.parse(raw); } catch (err) { return; }
+
+          if (data.type === 'online_list') {
+            renderOnlineUsers(data.users || []);
+            return;
+          }
+          if (data.type === 'kick') {
+            alert(data.reason || '你已被管理员踢出');
+            localStorage.clear();
+            location.href = '/login';
+            return;
+          }
+        };
 
         // ==================== 帖子详情 ====================
         function fmtTime(ms) {

@@ -20,13 +20,8 @@ import java.util.Set;
 /** 聊天相关：/chat、/send、/events、/recall、/online、/history */
 public class ChatHandler {
 
-    /** 撤回时间窗口：2 分钟 */
     private static final long RECALL_WINDOW_MS = 2 * 60 * 1000;
-
-    /** SSE 首次连接时只回放最近 N 条，其余通过 /history 分页拉取 */
     private static final int INITIAL_HISTORY = 30;
-
-    /** 分页每次拉取条数 */
     private static final int PAGE_SIZE = 30;
 
     private final MessageStore store;
@@ -114,7 +109,6 @@ public class ChatHandler {
             return;
         }
 
-        // SSE 连接数限制：每用户最多 N 个
         if (sse.countConnectionsFor(username) >= BootstrapLayer.ChatServer.SSE_MAX_PER_USER) {
             HttpUtil.sendText(ex, 429, "too many connections");
             return;
@@ -129,12 +123,17 @@ public class ChatHandler {
         sse.register(os, username);
 
         try {
+            // 历史消息回放
             for (String msg : store.recent(INITIAL_HISTORY)) {
                 sse.sendTo(os, msg);
             }
             os.write("data: {\"type\":\"history_end\"}\n\n".getBytes(StandardCharsets.UTF_8));
             os.flush();
 
+            // 有新用户上线 → 广播最新在线列表给所有人
+            broadcastOnlineList();
+
+            // 心跳
             while (true) {
                 Thread.sleep(15000);
                 os.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
@@ -143,9 +142,30 @@ public class ChatHandler {
         } catch (Exception e) {
         } finally {
             sse.unregister(os);
+            // 有用户下线 → 广播最新在线列表给所有人
+            broadcastOnlineList();
             try { os.close(); } catch (IOException ignored) {}
             ex.close();
         }
+    }
+
+    /** 广播在线用户列表给所有 SSE 客户端 */
+    private void broadcastOnlineList() {
+        Set<String> users = sse.listOnlineUsers();
+        StringBuilder sb = new StringBuilder("{\"type\":\"online_list\",\"users\":[");
+        boolean first = true;
+        for (String u : users) {
+            User user = userStore.getUser(u);
+            if (user == null) continue;
+            if (!first) sb.append(",");
+            first = false;
+            sb.append("{\"username\":\"").append(HttpUtil.escapeJson(user.username)).append("\"")
+                    .append(",\"nickname\":\"").append(HttpUtil.escapeJson(user.nickname)).append("\"")
+                    .append(",\"avatarId\":").append(user.avatarId == null ? "null" : "\"" + HttpUtil.escapeJson(user.avatarId) + "\"")
+                    .append("}");
+        }
+        sb.append("]}");
+        sse.broadcast(sb.toString());
     }
 
     /** POST /recall?token=xxx  body: {"id":123} */
@@ -177,7 +197,7 @@ public class ChatHandler {
         }
     }
 
-    /** GET /online?token=xxx  返回最近 60 秒内有活动的用户 */
+    /** GET /online?token=xxx  前端初次加载时调一次 */
     public void handleOnline(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         if (sessions.getUser(token) == null) {
@@ -185,8 +205,7 @@ public class ChatHandler {
             return;
         }
 
-        // 在线 = 最近 60 秒内有任意请求
-        Set<String> users = sessions.listOnlineUsers();
+        Set<String> users = sse.listOnlineUsers();
         StringBuilder sb = new StringBuilder("{\"ok\":true,\"users\":[");
         boolean first = true;
         for (String u : users) {
@@ -203,7 +222,7 @@ public class ChatHandler {
         HttpUtil.sendJson(ex, 200, sb.toString());
     }
 
-    /** GET /history?token=xxx&before=<id>  加载更早的消息 */
+    /** GET /history?token=xxx&before=<id> */
     public void handleHistory(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         if (sessions.getUser(token) == null) {
