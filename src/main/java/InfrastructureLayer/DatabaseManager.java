@@ -24,7 +24,6 @@ public class DatabaseManager {
 
     public static Connection getConnection() throws SQLException {
         Connection conn = DriverManager.getConnection(DB_URL);
-        // 每个连接都设置，防止锁等待
         try (Statement st = conn.createStatement()) {
             st.execute("PRAGMA busy_timeout = 5000");
         }
@@ -39,7 +38,7 @@ public class DatabaseManager {
         }
 
         try (Connection conn = getConnection(); Statement st = conn.createStatement()) {
-            // WAL 模式：读写并发，大幅提升性能
+            // WAL 模式
             st.execute("PRAGMA journal_mode = WAL");
             st.execute("PRAGMA synchronous = NORMAL");
 
@@ -77,13 +76,25 @@ public class DatabaseManager {
                 )
             """);
 
+            // 会话表（持久化，重启服务器后仍有效）
+            st.execute("""
+                CREATE TABLE IF NOT EXISTS sessions (
+                    token TEXT PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    last_active INTEGER NOT NULL
+                )
+            """);
+
+            // 兼容旧库：images 表可能没有 type 字段
             try {
                 st.execute("ALTER TABLE images ADD COLUMN type TEXT NOT NULL DEFAULT 'message'");
             } catch (SQLException ignored) {}
 
+            // 索引
             st.execute("CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_messages_username ON messages(username)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_images_created ON images(created_at)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active)");
 
             System.out.println("[DB] 数据库初始化完成：" + DB_URL);
         } catch (SQLException e) {

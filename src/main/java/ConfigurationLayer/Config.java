@@ -37,6 +37,9 @@ public class Config {
     public static final String ADMIN_USERNAME;
     public static final String ADMIN_PASSWORD;
 
+    /** Session 有效期（天） */
+    public static final int SESSION_TTL_DAYS;
+
     /** 服务器只绑定 127.0.0.1，外网通过 ngrok 转发访问 */
     public static final String BIND_ADDRESS = "127.0.0.1";
 
@@ -76,5 +79,7 @@ public class Config {
 
         ADMIN_USERNAME = props.getProperty("admin.username", "admin");
         ADMIN_PASSWORD = props.getProperty("admin.password", "admin123");
+
+        SESSION_TTL_DAYS = Integer.parseInt(props.getProperty("session.ttl.days", "30"));
     }
 }

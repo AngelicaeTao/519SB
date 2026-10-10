@@ -54,17 +54,19 @@ public class WebPages {
           #img-btn { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 15px; cursor: pointer; color: #333; }
           #send-btn { background: #07c160; color: #fff; border: none; border-radius: 6px; padding: 10px 20px; font-size: 15px; cursor: pointer; }
           #send-btn:disabled, #img-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-          .bubble img { max-width: 100%; border-radius: 4px; display: block; cursor: zoom-in; }
+          .bubble img { max-width: 100%; max-height: 40vh; width: auto; height: auto; border-radius: 4px; display: block; cursor: zoom-in; object-fit: contain; }
           #mention-dropdown { position: absolute; bottom: 60px; left: 10px; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 240px; overflow-y: auto; min-width: 200px; display: none; z-index: 50; }
           #mention-dropdown.show { display: block; }
           .mention-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; }
           .mention-item:hover, .mention-item.active { background: #f0f9f4; }
           .mention-item .avatar { width: 24px; height: 24px; border-radius: 50%; background: #07c160; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; }
           .mention-item .avatar img { width: 100%; height: 100%; object-fit: cover; }
-          #image-preview { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; }
+          #image-preview { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; overflow: hidden; }
           #image-preview.show { display: flex; }
           .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
-          .preview-content img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; }
+          .preview-content img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; cursor: grab; user-select: none; -webkit-user-drag: none; }
+          .preview-content img.dragging { cursor: grabbing; transition: none; }
+          .preview-content img.smooth { transition: transform 0.1s ease-out; }
           .preview-actions { display: flex; gap: 12px; }
           .preview-actions a, .preview-actions button { padding: 9px 24px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; text-decoration: none; font-family: inherit; line-height: 1.2; }
           .preview-actions a { background: #07c160; color: #fff; }
@@ -99,9 +101,10 @@ public class WebPages {
 
         <div id="image-preview" onclick="onMaskClick(event)">
           <div class="preview-content">
-            <img id="preview-img" src="" alt="">
+            <img id="preview-img" src="" alt="" draggable="false" onwheel="onPreviewWheel(event)">
             <div class="preview-actions">
               <a id="preview-download" href="#" download>下载图片</a>
+              <button onclick="resetPreviewZoom()">重置缩放</button>
               <button onclick="closePreview()">关闭</button>
             </div>
           </div>
@@ -478,22 +481,135 @@ public class WebPages {
           mentionDropdown.classList.add('show');
         }
 
-        // ==================== 图片预览 ====================
+        // ==================== 图片预览 + 滚轮缩放 + 拖动 ====================
+        var previewScale = 1;
+        var previewMinScale = 0.2;
+        var previewMaxScale = 8;
+        var previewX = 0;
+        var previewY = 0;
+        var dragging = false;
+        var dragStartX = 0;
+        var dragStartY = 0;
+        var dragOffsetX = 0;
+        var dragOffsetY = 0;
+
+        function applyPreviewTransform(smooth) {
+          var img = document.getElementById('preview-img');
+          if (smooth) img.classList.add('smooth');
+          else img.classList.remove('smooth');
+          img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+        }
+
         function openPreview(id) {
-          document.getElementById('preview-img').src = '/image/' + id;
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
+          var img = document.getElementById('preview-img');
+          img.src = '/image/' + id;
+          img.classList.remove('dragging');
+          applyPreviewTransform(false);
           var dl = document.getElementById('preview-download');
           dl.href = '/image/' + id + '?download=1';
           dl.setAttribute('download', 'image_' + id + '.jpg');
           document.getElementById('image-preview').classList.add('show');
         }
+
         function closePreview() {
           document.getElementById('image-preview').classList.remove('show');
-          document.getElementById('preview-img').src = '';
+          var img = document.getElementById('preview-img');
+          img.src = '';
+          img.classList.remove('dragging');
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
         }
+
+        function resetPreviewZoom() {
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          applyPreviewTransform(true);
+        }
+
+        function clampPreviewPosition() {
+          var img = document.getElementById('preview-img');
+          if (!img.src) return;
+          var rect = img.getBoundingClientRect();
+          var vw = window.innerWidth;
+          var vh = window.innerHeight;
+          var margin = 80;    // 图片至少要有 80px 留在视口内
+
+          var dx = 0, dy = 0;
+
+          // 图片右边缘太靠左 → 拉回来
+          if (rect.right < margin) dx = margin - rect.right;
+          // 图片左边缘太靠右 → 拉回来
+          if (rect.left > vw - margin) dx = (vw - margin) - rect.left;
+          // 图片下边缘太靠上 → 拉回来
+          if (rect.bottom < margin) dy = margin - rect.bottom;
+          // 图片上边缘太靠下 → 拉回来
+          if (rect.top > vh - margin) dy = (vh - margin) - rect.top;
+
+          if (dx !== 0 || dy !== 0) {
+            previewX += dx;
+            previewY += dy;
+            img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+          }
+        }
+
+        function onPreviewWheel(e) {
+          e.preventDefault();
+          var delta = -e.deltaY * 0.002;
+          previewScale = previewScale * (1 + delta);
+          if (previewScale < previewMinScale) previewScale = previewMinScale;
+          if (previewScale > previewMaxScale) previewScale = previewMaxScale;
+          applyPreviewTransform(true);
+          // 缩放后检查图片是否跑出视口
+          setTimeout(clampPreviewPosition, 120);
+        }
+
+        function onPreviewMouseDown(e) {
+          if (e.button !== 0) return;   // 只响应左键
+          dragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragOffsetX = previewX;
+          dragOffsetY = previewY;
+          var img = document.getElementById('preview-img');
+          img.classList.add('dragging');
+          e.preventDefault();
+        }
+
+        function onPreviewMouseMove(e) {
+          if (!dragging) return;
+          previewX = dragOffsetX + (e.clientX - dragStartX);
+          previewY = dragOffsetY + (e.clientY - dragStartY);
+          applyPreviewTransform(false);
+        }
+
+        function onPreviewMouseUp(e) {
+          if (!dragging) return;
+          dragging = false;
+          var img = document.getElementById('preview-img');
+          img.classList.remove('dragging');
+          clampPreviewPosition();
+        }
+
         function onMaskClick(e) {
           if (e.target.id === 'image-preview') closePreview();
         }
 
+        // 绑定事件
+        (function() {
+          var img = document.getElementById('preview-img');
+          img.addEventListener('dblclick', resetPreviewZoom);
+          img.addEventListener('mousedown', onPreviewMouseDown);
+          document.addEventListener('mousemove', onPreviewMouseMove);
+          document.addEventListener('mouseup', onPreviewMouseUp);
+        })();
+        
         // ==================== 发送 ====================
         async function sendText() {
           var text = input.value.trim();

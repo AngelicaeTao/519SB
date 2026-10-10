@@ -43,3 +43,7 @@ login.window.ms=60000
 # 消息发送限制：在 send.window.ms 毫秒内，同一用户最多发送 send.max.count 条
 send.max.count=5
 send.window.ms=3000
+
+# Session 有效期（天）。超过这个时间没操作就自动退出登录
+# 常用值：1（一天）、7（一周）、30（一个月）、365（一年）
+session.ttl.days=30
