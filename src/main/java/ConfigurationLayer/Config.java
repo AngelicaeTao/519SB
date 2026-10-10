@@ -33,6 +33,10 @@ public class Config {
     public static final int SEND_MAX_COUNT;
     public static final long SEND_WINDOW_MS;
 
+    /** 默认管理员账号密码 */
+    public static final String ADMIN_USERNAME;
+    public static final String ADMIN_PASSWORD;
+
     /** 服务器只绑定 127.0.0.1，外网通过 ngrok 转发访问 */
     public static final String BIND_ADDRESS = "127.0.0.1";
 
@@ -69,5 +73,8 @@ public class Config {
 
         SEND_MAX_COUNT = Integer.parseInt(props.getProperty("send.max.count", "5"));
         SEND_WINDOW_MS = Long.parseLong(props.getProperty("send.window.ms", "3000"));
+
+        ADMIN_USERNAME = props.getProperty("admin.username", "admin");
+        ADMIN_PASSWORD = props.getProperty("admin.password", "admin123");
     }
 }

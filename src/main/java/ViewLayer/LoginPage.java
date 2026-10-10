@@ -1,6 +1,6 @@
 package ViewLayer;
 
-/** 登录页面的 HTML（登录 / 注册 / 修改密码 三个 tab） */
+/** 登录页面的 HTML（登录 / 注册 两个 tab） */
 public class LoginPage {
 
     public static final String HTML = """
@@ -51,6 +51,7 @@ public class LoginPage {
           .msg.show { display: block; }
           .msg.error { background: #fee; color: #c33; }
           .msg.success { background: #efe; color: #3a3; }
+          .tip { text-align: center; font-size: 12px; color: #999; margin-top: 16px; }
         </style></head><body>
         <div class="card">
           <h1>519SB 聊天室</h1>
@@ -59,7 +60,6 @@ public class LoginPage {
           <div class="tabs">
             <div class="tab active" data-tab="login">登录</div>
             <div class="tab" data-tab="register">注册</div>
-            <div class="tab" data-tab="change">修改密码</div>
           </div>
 
           <div id="msg" class="msg"></div>
@@ -75,18 +75,12 @@ public class LoginPage {
           <div class="form" data-form="register">
             <input type="text" id="reg-user" placeholder="账号（不超过 20 字）" autocomplete="off">
             <input type="text" id="reg-nick" placeholder="昵称（不超过 20 字）" autocomplete="off">
-            <input type="password" id="reg-pass" placeholder="密码（不超过 50 字）" autocomplete="new-password">
+            <input type="password" id="reg-pass" placeholder="密码（6~50 位，含字母和数字）" autocomplete="new-password">
             <input type="password" id="reg-pass2" placeholder="确认密码" autocomplete="new-password">
             <button onclick="doRegister()">注册并登录</button>
           </div>
 
-          <!-- 修改密码 -->
-          <div class="form" data-form="change">
-            <input type="text" id="chg-user" placeholder="用户名" autocomplete="off">
-            <input type="password" id="chg-pass" placeholder="新密码" autocomplete="new-password">
-            <input type="password" id="chg-pass2" placeholder="确认新密码" autocomplete="new-password">
-            <button onclick="doChange()">修改密码</button>
-          </div>
+          <p class="tip">忘记密码请联系管理员</p>
         </div>
 
         <script>
@@ -97,7 +91,7 @@ public class LoginPage {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.form').forEach(f => f.classList.remove('active'));
             tab.classList.add('active');
-            document.querySelector(`.form[data-form="${tab.dataset.tab}"]`).classList.add('active');
+            document.querySelector('.form[data-form="' + tab.dataset.tab + '"]').classList.add('active');
             hideMsg();
           };
         });
@@ -168,27 +162,8 @@ public class LoginPage {
           } catch (e) { showMsg('网络错误：' + e.message, 'error'); }
         }
 
-        async function doChange() {
-          const username = document.getElementById('chg-user').value.trim();
-          const newPassword = document.getElementById('chg-pass').value;
-          const newPassword2 = document.getElementById('chg-pass2').value;
-          if (!username || !newPassword) { showMsg('请输入用户名和新密码', 'error'); return; }
-          if (newPassword !== newPassword2) { showMsg('两次输入的密码不一致', 'error'); return; }
-          try {
-            const r = await api('/api/changePassword', { username, newPassword });
-            if (r.ok) {
-              showMsg('密码修改成功', 'success');
-              document.getElementById('chg-pass').value = '';
-              document.getElementById('chg-pass2').value = '';
-            } else {
-              showMsg(r.msg || '修改失败', 'error');
-            }
-          } catch (e) { showMsg('网络错误：' + e.message, 'error'); }
-        }
-
         document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
         document.getElementById('reg-pass2').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
-        document.getElementById('chg-pass2').addEventListener('keydown', e => { if (e.key === 'Enter') doChange(); });
         </script></body></html>
         """;
 }

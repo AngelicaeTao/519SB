@@ -47,9 +47,11 @@ public class ImageHandler implements HttpHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        // 区分头像和聊天图片，默认聊天图片
+        String type = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "type");
+        if (!"avatar".equals(type)) type = "message";
 
-        // 去掉 data:image/xxx;base64, 前缀
+        String body = HttpUtil.readBody(ex);
         String base64 = body;
         int comma = body.indexOf(',');
         if (body.startsWith("data:") && comma > 0) {
@@ -64,6 +66,12 @@ public class ImageHandler implements HttpHandler {
             return;
         }
 
+        // 空内容检查
+        if (bytes.length == 0) {
+            HttpUtil.sendText(ex, 400, "Empty image");
+            return;
+        }
+
         if (bytes.length > Config.MAX_IMAGE_SIZE) {
             HttpUtil.sendText(ex, 413, "Image too large");
             return;
@@ -74,10 +82,11 @@ public class ImageHandler implements HttpHandler {
 
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO images(id, data, created_at) VALUES(?,?,?)")) {
+                     "INSERT INTO images(id, data, type, created_at) VALUES(?,?,?,?)")) {
             ps.setString(1, id);
             ps.setBytes(2, bytes);
-            ps.setLong(3, now);
+            ps.setString(3, type);
+            ps.setLong(4, now);
             ps.executeUpdate();
         } catch (SQLException e) {
             System.err.println("[ImageHandler] 上传失败：" + e.getMessage());
@@ -85,10 +94,10 @@ public class ImageHandler implements HttpHandler {
             return;
         }
 
-        // 清理 24 小时前的旧图片
+        // 只清理聊天图片（type=message），头像永久保留
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "DELETE FROM images WHERE created_at < ?")) {
+                     "DELETE FROM images WHERE type = 'message' AND created_at < ?")) {
             ps.setLong(1, now - 24L * 3600 * 1000);
             ps.executeUpdate();
         } catch (SQLException ignored) {}
@@ -104,9 +113,7 @@ public class ImageHandler implements HttpHandler {
              PreparedStatement ps = conn.prepareStatement("SELECT data FROM images WHERE id = ?")) {
             ps.setString(1, id);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) {
-                    bytes = rs.getBytes("data");
-                }
+                if (rs.next()) bytes = rs.getBytes("data");
             }
         } catch (SQLException e) {
             System.err.println("[ImageHandler] 查询失败：" + e.getMessage());
@@ -118,7 +125,6 @@ public class ImageHandler implements HttpHandler {
             return;
         }
 
-        // 检查是否需要强制下载（前端下载按钮会带 ?download=1）
         String query = ex.getRequestURI().getQuery();
         boolean download = query != null && query.contains("download=1");
 

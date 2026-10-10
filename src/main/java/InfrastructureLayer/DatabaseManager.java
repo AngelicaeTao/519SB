@@ -23,7 +23,12 @@ public class DatabaseManager {
     }
 
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL);
+        Connection conn = DriverManager.getConnection(DB_URL);
+        // 每个连接都设置，防止锁等待
+        try (Statement st = conn.createStatement()) {
+            st.execute("PRAGMA busy_timeout = 5000");
+        }
+        return conn;
     }
 
     public static void init() {
@@ -34,6 +39,10 @@ public class DatabaseManager {
         }
 
         try (Connection conn = getConnection(); Statement st = conn.createStatement()) {
+            // WAL 模式：读写并发，大幅提升性能
+            st.execute("PRAGMA journal_mode = WAL");
+            st.execute("PRAGMA synchronous = NORMAL");
+
             // 用户表
             st.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -63,11 +72,17 @@ public class DatabaseManager {
                 CREATE TABLE IF NOT EXISTS images (
                     id TEXT PRIMARY KEY,
                     data BLOB NOT NULL,
+                    type TEXT NOT NULL DEFAULT 'message',
                     created_at INTEGER NOT NULL
                 )
             """);
 
+            try {
+                st.execute("ALTER TABLE images ADD COLUMN type TEXT NOT NULL DEFAULT 'message'");
+            } catch (SQLException ignored) {}
+
             st.execute("CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_messages_username ON messages(username)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_images_created ON images(created_at)");
 
             System.out.println("[DB] 数据库初始化完成：" + DB_URL);

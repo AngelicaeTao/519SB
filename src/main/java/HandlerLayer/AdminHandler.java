@@ -70,6 +70,11 @@ public class AdminHandler {
         String newPassword = HttpUtil.extractJsonString(body, "newPassword");
         String avatarId = HttpUtil.extractJsonString(body, "avatarId");
         if (body.contains("\"avatarId\":null")) avatarId = null;
+        // 校验 avatarId 格式，防止 XSS
+        if (avatarId != null && !avatarId.matches("^[a-f0-9]{32}$")) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"头像 ID 格式错误\"}");
+            return;
+        }
 
         boolean isAdmin = body.contains("\"isAdmin\":true");
 
@@ -224,5 +229,24 @@ public class AdminHandler {
     private boolean isAdmin(String username) {
         User u = userStore.getUser(username);
         return u != null && u.isAdmin;
+    }
+
+    /** POST /api/admin/clearMessages?token=xxx  清空所有消息（保留用户和头像） */
+    public void handleClearMessages(HttpExchange ex) throws IOException {
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String operator = sessions.getUser(token);
+        if (operator == null || !isAdmin(operator)) {
+            HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"无权访问\"}");
+            return;
+        }
+        try (java.sql.Connection conn = InfrastructureLayer.DatabaseManager.getConnection();
+             java.sql.Statement st = conn.createStatement()) {
+            int msgCount = st.executeUpdate("DELETE FROM messages");
+            int imgCount = st.executeUpdate("DELETE FROM images WHERE type = 'message'");
+            HttpUtil.sendJson(ex, 200,
+                    "{\"ok\":true,\"msg\":\"已清空 " + msgCount + " 条消息、" + imgCount + " 张聊天图片\"}");
+        } catch (java.sql.SQLException e) {
+            HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"清空失败：" + HttpUtil.escapeJson(e.getMessage()) + "\"}");
+        }
     }
 }

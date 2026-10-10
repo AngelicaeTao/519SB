@@ -94,7 +94,10 @@ public class AdminPage {
         </div>
         <div class="container">
           <div class="card">
-            <h2>用户列表</h2>
+            <h2 style="display:flex; align-items:center; justify-content:space-between;">
+              用户列表
+              <button class="btn btn-red" onclick="clearAllMessages()">清空所有消息</button>
+            </h2>
             <div id="list-msg" class="msg"></div>
             <table>
               <thead>
@@ -214,8 +217,13 @@ public class AdminPage {
             const tdAvatar = document.createElement('td');
             const avatarDiv = document.createElement('div');
             avatarDiv.className = 'avatar';
-            if (u.avatarId) avatarDiv.innerHTML = `<img src="/image/${u.avatarId}">`;
-            else avatarDiv.textContent = (u.nickname || u.username).charAt(0).toUpperCase();
+            if (u.avatarId) {
+              const img = document.createElement('img');
+              img.src = '/image/' + u.avatarId;
+              avatarDiv.appendChild(img);
+            } else {
+              avatarDiv.textContent = (u.nickname || u.username).charAt(0).toUpperCase();
+            }
             tdAvatar.appendChild(avatarDiv);
 
             const tdUsername = document.createElement('td');
@@ -287,8 +295,12 @@ public class AdminPage {
 
         function renderEditAvatar() {
           const el = document.getElementById('edit-avatar');
-          if (editAvatarId) el.innerHTML = `<img src="/image/${editAvatarId}">`;
-          else {
+          el.innerHTML = '';
+          if (editAvatarId) {
+            const img = document.createElement('img');
+            img.src = '/image/' + editAvatarId;
+            el.appendChild(img);
+          } else {
             const nick = document.getElementById('edit-nickname').value || editTarget.username;
             el.textContent = nick.charAt(0).toUpperCase();
           }
@@ -305,7 +317,7 @@ public class AdminPage {
           if (!file) return;
           compressImage(file, 200, async (base64) => {
             try {
-              const res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN), { method: 'POST', body: base64 });
+              var res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=avatar', { method: 'POST', body: base64 });
               if (!res.ok) { showMsg('edit-msg', '头像上传失败：' + res.status, 'error'); return; }
               editAvatarId = (await res.text()).trim();
               renderEditAvatar();
@@ -368,12 +380,24 @@ public class AdminPage {
             const res = await fetch('/api/admin/userMessages?token=' + encodeURIComponent(TOKEN) + '&username=' + encodeURIComponent(u.username));
             const r = await res.json();
             if (!r.ok) {
-              document.getElementById('msg-list').innerHTML = `<p class="empty-tip" style="color:#c33;">${r.msg || '加载失败'}</p>`;
+              const list = document.getElementById('msg-list');
+              list.innerHTML = '';
+              const p = document.createElement('p');
+              p.className = 'empty-tip';
+              p.style.color = '#c33';
+              p.textContent = r.msg || '加载失败';
+              list.appendChild(p);
               return;
             }
             renderMessages(r.messages);
           } catch (e) {
-            document.getElementById('msg-list').innerHTML = `<p class="empty-tip" style="color:#c33;">网络错误：${e.message}</p>`;
+            const list = document.getElementById('msg-list');
+            list.innerHTML = '';
+            const p = document.createElement('p');
+            p.className = 'empty-tip';
+            p.style.color = '#c33';
+            p.textContent = '网络错误：' + e.message;
+            list.appendChild(p);
           }
         }
 
@@ -438,6 +462,17 @@ public class AdminPage {
         function updateSelectedCount() {
           const n = document.querySelectorAll('.msg-check:checked').length;
           document.getElementById('selected-count').textContent = n > 0 ? `已选 ${n} 条` : '';
+        }
+
+        async function clearAllMessages() {
+          if (!confirm('确定清空所有聊天消息？\\n\\n将删除：所有聊天消息 + 聊天图片\\n保留：所有用户 + 头像\\n\\n此操作不可恢复！')) return;
+          if (!confirm('再次确认：真的要清空？')) return;
+          try {
+            const res = await fetch('/api/admin/clearMessages?token=' + encodeURIComponent(TOKEN), { method: 'POST' });
+            const r = await res.json();
+            if (r.ok) { showMsg('list-msg', r.msg || '已清空', 'success'); }
+            else showMsg('list-msg', r.msg || '清空失败', 'error');
+          } catch (e) { showMsg('list-msg', '网络错误：' + e.message, 'error'); }
         }
 
         async function deleteOneMessage(id, rowEl) {

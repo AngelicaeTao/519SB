@@ -12,7 +12,7 @@ import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
 
-/** 门禁 + 登录、注册、修改密码、登出 */
+/** 门禁 + 登录、注册、登出 */
 public class AuthHandler {
 
     private static final String GATE_COOKIE = "gate_ok";
@@ -62,8 +62,12 @@ public class AuthHandler {
         return "1".equals(HttpUtil.getCookie(ex, GATE_COOKIE));
     }
 
-    /** 注册：用户名 + 密码 + 昵称 */
+    /** 注册：需要门禁通过 */
     public void handleRegister(HttpExchange ex) throws IOException {
+        if (!checkGate(ex)) {
+            HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"未通过验证\"}");
+            return;
+        }
         if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
             HttpUtil.sendJson(ex, 405, "{\"ok\":false,\"msg\":\"method not allowed\"}");
             return;
@@ -99,8 +103,12 @@ public class AuthHandler {
         }
     }
 
-    /** 登录，返回 token + 用户信息 */
+    /** 登录：需要门禁通过 */
     public void handleLogin(HttpExchange ex) throws IOException {
+        if (!checkGate(ex)) {
+            HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"未通过验证\"}");
+            return;
+        }
         if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
             HttpUtil.sendJson(ex, 405, "{\"ok\":false,\"msg\":\"method not allowed\"}");
             return;
@@ -114,11 +122,9 @@ public class AuthHandler {
             return;
         }
 
-        // 登录频率限制（按账号）
         String limitKey = "login:" + username;
         if (!loginLimiter.allow(limitKey, Config.LOGIN_MAX_ATTEMPTS, Config.LOGIN_WINDOW_MS)) {
-            HttpUtil.sendJson(ex, 429,
-                    "{\"ok\":false,\"msg\":\"登录尝试过于频繁，请稍后再试\"}");
+            HttpUtil.sendJson(ex, 429, "{\"ok\":false,\"msg\":\"登录尝试过于频繁，请稍后再试\"}");
             return;
         }
 
@@ -136,41 +142,13 @@ public class AuthHandler {
         }
     }
 
-    /** 修改密码（登录页 tab，无旧密码校验） */
-    public void handleChangePassword(HttpExchange ex) throws IOException {
-        if (!"POST".equalsIgnoreCase(ex.getRequestMethod())) {
-            HttpUtil.sendJson(ex, 405, "{\"ok\":false,\"msg\":\"method not allowed\"}");
-            return;
-        }
-        String body = HttpUtil.readBody(ex);
-        String username = HttpUtil.extractJsonString(body, "username");
-        String newPassword = HttpUtil.extractJsonString(body, "newPassword");
-
-        if (username == null || username.isBlank() || newPassword == null || newPassword.isEmpty()) {
-            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"用户名和新密码不能为空\"}");
-            return;
-        }
-
-        String pwdErr = checkPasswordStrength(newPassword);
-        if (pwdErr != null) {
-            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"" + pwdErr + "\"}");
-            return;
-        }
-
-        if (userStore.changePassword(username, newPassword)) {
-            HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"msg\":\"密码修改成功\"}");
-        } else {
-            HttpUtil.sendJson(ex, 404, "{\"ok\":false,\"msg\":\"用户不存在\"}");
-        }
-    }
-
     public void handleLogout(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         sessions.removeSession(token);
         HttpUtil.sendJson(ex, 200, "{\"ok\":true}");
     }
 
-    /** 密码强度校验，返回 null 表示通过，否则返回错误信息 */
+    /** 密码强度校验 */
     private String checkPasswordStrength(String pwd) {
         if (pwd.length() < 6) return "密码至少 6 位";
         if (pwd.length() > 50) return "密码最多 50 位";
