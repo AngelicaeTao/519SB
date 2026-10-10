@@ -1,0 +1,97 @@
+package ViewLayer;
+
+/** 验证码门禁页面 */
+public class GatePage {
+
+    public static final String HTML = """
+        <!doctype html>
+        <html lang="zh-CN"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>访问验证 - 519SB 聊天室</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #232526 0%, #414345 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+          }
+          .card {
+            background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+            width: 100%; max-width: 380px; padding: 36px 28px; text-align: center;
+          }
+          .icon { font-size: 40px; margin-bottom: 12px; }
+          h1 { font-size: 20px; color: #333; margin-bottom: 8px; }
+          .subtitle { font-size: 13px; color: #999; margin-bottom: 26px; }
+          input {
+            width: 100%; padding: 14px; font-size: 18px; letter-spacing: 4px;
+            text-align: center; border: 1px solid #ddd; border-radius: 8px;
+            margin-bottom: 16px; outline: none; transition: border 0.2s;
+            font-family: inherit;
+          }
+          input:focus { border-color: #667eea; }
+          button {
+            width: 100%; padding: 13px; font-size: 15px; font-weight: 500;
+            background: #333; color: #fff; border: none; border-radius: 8px;
+            cursor: pointer; transition: background 0.2s;
+          }
+          button:hover { background: #111; }
+          button:disabled { background: #999; cursor: not-allowed; }
+          .msg {
+            padding: 10px 14px; border-radius: 8px; font-size: 13px;
+            margin-bottom: 14px; display: none;
+          }
+          .msg.show { display: block; }
+          .msg.error { background: #fee; color: #c33; }
+        </style></head><body>
+        <div class="card">
+          <div class="icon">🔒</div>
+          <h1>访问验证</h1>
+          <p class="subtitle">请输入验证码以继续</p>
+          <div id="msg" class="msg"></div>
+          <input type="tel" id="code" placeholder="输入验证码" maxlength="20" autocomplete="off">
+          <button id="submit" onclick="doVerify()">进入</button>
+        </div>
+        <script>
+        const codeInput = document.getElementById('code');
+        const msgEl = document.getElementById('msg');
+        const btn = document.getElementById('submit');
+
+        function showMsg(text) {
+          msgEl.textContent = text;
+          msgEl.className = 'msg show error';
+        }
+
+        async function doVerify() {
+          const code = codeInput.value.trim();
+          if (!code) { showMsg('请输入验证码'); return; }
+
+          btn.disabled = true;
+          btn.textContent = '验证中...';
+          try {
+            const res = await fetch('/api/verifyCode', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ code })
+            });
+            const r = await res.json();
+            if (r.ok) {
+              location.href = '/login';
+            } else {
+              showMsg(r.msg || '验证码错误');
+              codeInput.value = '';
+              codeInput.focus();
+            }
+          } catch (e) {
+            showMsg('网络错误：' + e.message);
+          } finally {
+            btn.disabled = false;
+            btn.textContent = '进入';
+          }
+        }
+
+        codeInput.addEventListener('keydown', e => { if (e.key === 'Enter') doVerify(); });
+        codeInput.focus();
+        </script></body></html>
+        """;
+}

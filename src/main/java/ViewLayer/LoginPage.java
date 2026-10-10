@@ -1,0 +1,194 @@
+package ViewLayer;
+
+/** 登录页面的 HTML（登录 / 注册 / 修改密码 三个 tab） */
+public class LoginPage {
+
+    public static final String HTML = """
+        <!doctype html>
+        <html lang="zh-CN"><head><meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>登录 - 519SB 聊天室</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+            padding: 20px;
+          }
+          .card {
+            background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%; max-width: 380px; padding: 32px 28px;
+          }
+          h1 { text-align: center; font-size: 22px; color: #333; margin-bottom: 6px; }
+          .subtitle { text-align: center; font-size: 13px; color: #999; margin-bottom: 24px; }
+          .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 22px; }
+          .tab {
+            flex: 1; text-align: center; padding: 10px 0; cursor: pointer;
+            font-size: 14px; color: #666; border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+          }
+          .tab.active { color: #667eea; border-bottom-color: #667eea; font-weight: 500; }
+          .form { display: none; }
+          .form.active { display: block; }
+          input {
+            width: 100%; padding: 12px 14px; font-size: 15px;
+            border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px;
+            outline: none; transition: border 0.2s;
+          }
+          input:focus { border-color: #667eea; }
+          button {
+            width: 100%; padding: 12px; font-size: 15px; font-weight: 500;
+            background: #667eea; color: #fff; border: none; border-radius: 8px;
+            cursor: pointer; transition: background 0.2s;
+          }
+          button:hover { background: #5568d3; }
+          button:disabled { background: #ccc; cursor: not-allowed; }
+          .msg {
+            padding: 10px 14px; border-radius: 8px; font-size: 13px;
+            margin-bottom: 14px; display: none;
+          }
+          .msg.show { display: block; }
+          .msg.error { background: #fee; color: #c33; }
+          .msg.success { background: #efe; color: #3a3; }
+        </style></head><body>
+        <div class="card">
+          <h1>519SB 聊天室</h1>
+          <p class="subtitle">登录后开始聊天</p>
+
+          <div class="tabs">
+            <div class="tab active" data-tab="login">登录</div>
+            <div class="tab" data-tab="register">注册</div>
+            <div class="tab" data-tab="change">修改密码</div>
+          </div>
+
+          <div id="msg" class="msg"></div>
+
+          <!-- 登录 -->
+          <div class="form active" data-form="login">
+            <input type="text" id="login-user" placeholder="用户名" autocomplete="username">
+            <input type="password" id="login-pass" placeholder="密码" autocomplete="current-password">
+            <button onclick="doLogin()">登录</button>
+          </div>
+
+          <!-- 注册 -->
+          <div class="form" data-form="register">
+            <input type="text" id="reg-user" placeholder="账号（不超过 20 字）" autocomplete="off">
+            <input type="text" id="reg-nick" placeholder="昵称（不超过 20 字）" autocomplete="off">
+            <input type="password" id="reg-pass" placeholder="密码（不超过 50 字）" autocomplete="new-password">
+            <input type="password" id="reg-pass2" placeholder="确认密码" autocomplete="new-password">
+            <button onclick="doRegister()">注册并登录</button>
+          </div>
+
+          <!-- 修改密码 -->
+          <div class="form" data-form="change">
+            <input type="text" id="chg-user" placeholder="用户名" autocomplete="off">
+            <input type="password" id="chg-pass" placeholder="新密码" autocomplete="new-password">
+            <input type="password" id="chg-pass2" placeholder="确认新密码" autocomplete="new-password">
+            <button onclick="doChange()">修改密码</button>
+          </div>
+        </div>
+
+        <script>
+        const msgEl = document.getElementById('msg');
+
+        document.querySelectorAll('.tab').forEach(tab => {
+          tab.onclick = () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.form').forEach(f => f.classList.remove('active'));
+            tab.classList.add('active');
+            document.querySelector(`.form[data-form="${tab.dataset.tab}"]`).classList.add('active');
+            hideMsg();
+          };
+        });
+
+        function showMsg(text, type) {
+          msgEl.textContent = text;
+          msgEl.className = 'msg show ' + type;
+        }
+        function hideMsg() { msgEl.className = 'msg'; }
+
+        async function api(url, data) {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+          });
+          return await res.json();
+        }
+
+        function saveSession(r) {
+          localStorage.setItem('token', r.token);
+          localStorage.setItem('username', r.username);
+          localStorage.setItem('nickname', r.nickname);
+          localStorage.setItem('avatarId', r.avatarId == null ? 'null' : r.avatarId);
+          localStorage.setItem('isAdmin', r.isAdmin ? 'true' : 'false');
+        }
+
+        async function doLogin() {
+          const username = document.getElementById('login-user').value.trim();
+          const password = document.getElementById('login-pass').value;
+          if (!username || !password) { showMsg('请输入用户名和密码', 'error'); return; }
+          try {
+            const r = await api('/api/login', { username, password });
+            if (r.ok) {
+              saveSession(r);
+              location.href = '/chat';
+            } else {
+              showMsg(r.msg || '登录失败', 'error');
+            }
+          } catch (e) { showMsg('网络错误：' + e.message, 'error'); }
+        }
+
+        async function doRegister() {
+          const username = document.getElementById('reg-user').value.trim();
+          const nickname = document.getElementById('reg-nick').value.trim();
+          const password = document.getElementById('reg-pass').value;
+          const password2 = document.getElementById('reg-pass2').value;
+          if (!username || !password) { showMsg('请输入账号和密码', 'error'); return; }
+          if (!nickname) { showMsg('请输入昵称', 'error'); return; }
+          if (password !== password2) { showMsg('两次输入的密码不一致', 'error'); return; }
+          try {
+            const r = await api('/api/register', { username, password, nickname });
+            if (!r.ok) {
+              showMsg(r.msg || '注册失败', 'error');
+              return;
+            }
+            showMsg('注册成功，正在登录...', 'success');
+            const loginRes = await api('/api/login', { username, password });
+            if (loginRes.ok) {
+              saveSession(loginRes);
+              location.href = '/chat';
+            } else {
+              showMsg('注册成功，但自动登录失败，请手动登录', 'error');
+              document.querySelector('.tab[data-tab="login"]').click();
+              document.getElementById('login-user').value = username;
+              document.getElementById('login-pass').focus();
+            }
+          } catch (e) { showMsg('网络错误：' + e.message, 'error'); }
+        }
+
+        async function doChange() {
+          const username = document.getElementById('chg-user').value.trim();
+          const newPassword = document.getElementById('chg-pass').value;
+          const newPassword2 = document.getElementById('chg-pass2').value;
+          if (!username || !newPassword) { showMsg('请输入用户名和新密码', 'error'); return; }
+          if (newPassword !== newPassword2) { showMsg('两次输入的密码不一致', 'error'); return; }
+          try {
+            const r = await api('/api/changePassword', { username, newPassword });
+            if (r.ok) {
+              showMsg('密码修改成功', 'success');
+              document.getElementById('chg-pass').value = '';
+              document.getElementById('chg-pass2').value = '';
+            } else {
+              showMsg(r.msg || '修改失败', 'error');
+            }
+          } catch (e) { showMsg('网络错误：' + e.message, 'error'); }
+        }
+
+        document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+        document.getElementById('reg-pass2').addEventListener('keydown', e => { if (e.key === 'Enter') doRegister(); });
+        document.getElementById('chg-pass2').addEventListener('keydown', e => { if (e.key === 'Enter') doChange(); });
+        </script></body></html>
+        """;
+}

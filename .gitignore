@@ -1,0 +1,53 @@
+# ===== Maven 编译输出 =====
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+
+# ===== IntelliJ IDEA =====
+.idea/
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+
+# ===== 敏感文件（含私钥）=====
+keystore.p12
+*.p12
+*.jks
+*.keystore
+*.truststore
+
+# ===== 本机配置 =====
+config.properties
+
+# ===== 数据库和用户数据 =====
+data/
+users.properties
+
+# ===== ngrok =====
+ngrok.exe
+ngrok
+ngrok.zip
+
+# ===== 旧编译产物 =====
+out/
+*.class
+
+# ===== 日志 =====
+*.log
+logs/
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===== 临时文件 =====
+*.tmp
+*.bak
+*.swp
+*~

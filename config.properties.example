@@ -1,0 +1,34 @@
+# ==========================================
+# 519SB 聊天室 - 配置模板
+# 把这个文件复制一份，重命名为 config.properties 即可使用
+# ==========================================
+
+# 服务器端口（ngrok 会转发到这个端口）
+port=8443
+
+# 网站标题（会显示在聊天页面顶部）
+site.title=宿舍聊天室
+
+# keystore 文件路径
+keystore.path=keystore.p12
+
+# keystore 密码（必须与 setup.bat 生成证书时的密码一致）
+keystore.password=changeit
+
+# SQLite 数据库文件路径（存聊天记录、图片、用户）
+db.file=data/chat.db
+
+# 历史消息保留条数（超出后自动删除最旧的）
+max.history=200
+
+# 单张图片最大字节数（默认 5MB）
+max.image.size=5242880
+
+# 前端压缩图片最大宽度（像素，越大越清晰越占流量）
+image.max.width=800
+
+# 前端压缩图片 JPEG 质量（0.0 到 1.0，越小越省流量越模糊）
+image.quality=0.6
+
+# HTTP 线程池大小（同时处理请求的数量）
+thread.pool.size=16
