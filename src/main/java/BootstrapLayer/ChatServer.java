@@ -2,11 +2,13 @@ package BootstrapLayer;
 
 import ConfigurationLayer.Config;
 import DataLayer.MessageStore;
+import DataLayer.PostStore;              // ★ 新增
 import DataLayer.UserStore;
 import HandlerLayer.AdminHandler;
 import HandlerLayer.AuthHandler;
 import HandlerLayer.ChatHandler;
 import HandlerLayer.ImageHandler;
+import HandlerLayer.PostHandler;         // ★ 新增
 import HandlerLayer.ProfileHandler;
 import InfrastructureLayer.DatabaseManager;
 import InfrastructureLayer.SessionManager;
@@ -59,6 +61,10 @@ public class ChatServer {
         ProfileHandler profileHandler = new ProfileHandler(userStore, sessions);
         AdminHandler adminHandler = new AdminHandler(userStore, store, sessions, sse);
 
+        // ★ 新增：帖子
+        PostStore postStore = new PostStore();
+        PostHandler postHandler = new PostHandler(postStore, sessions, userStore);
+
         // 3. 创建 HTTPS 服务器
         HttpsServer server = HttpsServer.create(
                 new InetSocketAddress(Config.BIND_ADDRESS, Config.PORT), 0);
@@ -93,6 +99,10 @@ public class ChatServer {
         server.createContext("/api/admin/deleteUser",     adminHandler::handleDeleteUser);
         server.createContext("/api/admin/deleteMessage",  adminHandler::handleDeleteMessage);
         server.createContext("/api/admin/deleteMessages", adminHandler::handleDeleteMessages);
+
+        // ★ 新增：帖子
+        server.createContext("/posts",     postHandler);
+        server.createContext("/api/posts", postHandler);
 
         server.setExecutor(Executors.newFixedThreadPool(Config.THREAD_POOL_SIZE));
         server.start();

@@ -22,6 +22,13 @@ public class WebPages {
             border-radius: 6px; cursor: pointer; color: #666; text-decoration: none;
           }
           #header .right a:hover, #header .right button:hover { background: #f5f5f5; }
+          .nav-btn {
+            font-size: 12px; padding: 5px 10px;
+            border: 1px solid #07c160; background: #fff; color: #07c160;
+            border-radius: 6px; text-decoration: none;
+            transition: all 0.15s;
+          }
+          .nav-btn:hover { background: #07c160; color: #fff; }
           .my-avatar {
             width: 28px; height: 28px; border-radius: 50%; background: #07c160; color: #fff;
             display: inline-flex; align-items: center; justify-content: center;
@@ -83,7 +90,8 @@ public class WebPages {
             <span class="title">__SITE_TITLE__</span>
           </div>
           <div class="right">
-            <a id="admin-link" href="/admin" style="display:none;">管理</a>
+            <a href="/posts" class="nav-btn">帖子</a>
+            <a id="admin-link" href="/admin" class="nav-btn" style="display:none;">管理</a>
             <a href="/profile" title="个人中心">
               <span class="my-avatar" id="my-avatar"></span>
             </a>
