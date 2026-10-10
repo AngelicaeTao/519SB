@@ -13,12 +13,6 @@ public class RateLimiter {
 
     private final Map<String, Window> windows = new ConcurrentHashMap<>();
 
-    /**
-     * 是否允许通过
-     * @param key       限制维度（如 "login:admin" / "send:alice"）
-     * @param maxCount  窗口内最大次数
-     * @param windowMs  窗口时长（毫秒）
-     */
     public boolean allow(String key, int maxCount, long windowMs) {
         long now = System.currentTimeMillis();
         Window w = windows.computeIfAbsent(key, k -> new Window());
@@ -32,5 +26,11 @@ public class RateLimiter {
             w.count++;
             return true;
         }
+    }
+
+    /** 清理过期条目，避免内存泄漏 */
+    public void cleanup(long maxWindowMs) {
+        long now = System.currentTimeMillis();
+        windows.entrySet().removeIf(e -> now - e.getValue().start > maxWindowMs);
     }
 }

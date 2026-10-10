@@ -8,9 +8,12 @@ import ViewLayer.ProfilePage;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.util.regex.Pattern;
 
 /** 个人中心：查看/修改自己的昵称、头像、密码 */
 public class ProfileHandler {
+
+    private static final Pattern AVATAR_ID_PATTERN = Pattern.compile("^[a-f0-9]{32}$");
 
     private final UserStore userStore;
     private final SessionManager sessions;
@@ -20,12 +23,10 @@ public class ProfileHandler {
         this.sessions = sessions;
     }
 
-    /** GET /profile  个人中心页面 */
     public void handlePage(HttpExchange ex) throws IOException {
         HttpUtil.sendHtml(ex, 200, ProfilePage.HTML);
     }
 
-    /** POST /api/profile/update?token=xxx  body: {"nickname":"..","avatarId":".."} */
     public void handleUpdate(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String username = sessions.getUser(token);
@@ -37,7 +38,6 @@ public class ProfileHandler {
         String body = HttpUtil.readBody(ex);
         String nickname = HttpUtil.extractJsonString(body, "nickname");
         String avatarId = HttpUtil.extractJsonString(body, "avatarId");
-        // avatarId 特殊处理：可能是 JSON null，也可能是空字符串
         if (body.contains("\"avatarId\":null")) avatarId = null;
 
         if (nickname == null || nickname.isBlank()) {
@@ -46,6 +46,11 @@ public class ProfileHandler {
         }
         if (nickname.length() > 20) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"昵称过长\"}");
+            return;
+        }
+        // 校验 avatarId 格式，防止 XSS
+        if (avatarId != null && !AVATAR_ID_PATTERN.matcher(avatarId).matches()) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"头像 ID 格式错误\"}");
             return;
         }
 
@@ -60,7 +65,7 @@ public class ProfileHandler {
         }
     }
 
-    /** POST /api/profile/changePassword?token=xxx  body: {"newPassword":".."} */
+    /** 修改密码：需要登录 + 旧密码校验 */
     public void handleChangePassword(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String username = sessions.getUser(token);
@@ -70,14 +75,25 @@ public class ProfileHandler {
         }
 
         String body = HttpUtil.readBody(ex);
+        String oldPassword = HttpUtil.extractJsonString(body, "oldPassword");
         String newPassword = HttpUtil.extractJsonString(body, "newPassword");
 
+        if (oldPassword == null || oldPassword.isEmpty()) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"请输入旧密码\"}");
+            return;
+        }
         if (newPassword == null || newPassword.isEmpty()) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"新密码不能为空\"}");
             return;
         }
-        if (newPassword.length() > 50) {
-            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"密码过长\"}");
+        if (newPassword.length() < 6 || newPassword.length() > 50) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"新密码长度应为 6~50 位\"}");
+            return;
+        }
+
+        // 校验旧密码
+        if (!userStore.verify(username, oldPassword)) {
+            HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"旧密码错误\"}");
             return;
         }
 

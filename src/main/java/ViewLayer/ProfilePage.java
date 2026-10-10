@@ -80,8 +80,12 @@ public class ProfilePage {
             <h2>修改密码</h2>
             <div id="pwd-msg" class="msg"></div>
             <div class="form-row">
+              <label>旧密码</label>
+              <input type="password" id="old-password" placeholder="请输入旧密码" autocomplete="current-password">
+            </div>
+            <div class="form-row">
               <label>新密码</label>
-              <input type="password" id="new-password" placeholder="请输入新密码" autocomplete="new-password">
+              <input type="password" id="new-password" placeholder="6~50 位，含字母和数字" autocomplete="new-password">
             </div>
             <div class="form-row">
               <label>确认新密码</label>
@@ -100,9 +104,6 @@ public class ProfilePage {
         if (currentAvatarId === 'null') currentAvatarId = null;
         let currentNickname = localStorage.getItem('nickname') || USERNAME;
 
-        // 记录原始值（保存时用），以及是否处于"已保存"状态
-        let savedNickname = currentNickname;
-        let savedAvatarId = currentAvatarId;
         let isSaved = false;
 
         document.getElementById('username').value = USERNAME;
@@ -110,8 +111,11 @@ public class ProfilePage {
 
         function renderAvatar() {
           const el = document.getElementById('avatar-preview');
+          el.innerHTML = '';
           if (currentAvatarId) {
-            el.innerHTML = `<img src="/image/${currentAvatarId}">`;
+            const img = document.createElement('img');
+            img.src = '/image/' + currentAvatarId;
+            el.appendChild(img);
           } else {
             el.textContent = (currentNickname || USERNAME).charAt(0).toUpperCase();
           }
@@ -127,9 +131,7 @@ public class ProfilePage {
           document.getElementById(id).className = 'msg';
         }
 
-        // ---- 按钮状态切换 ----
         function markDirty() {
-          // 有任何改动 → 按钮恢复成"保存修改"
           if (isSaved) {
             isSaved = false;
             const btn = document.getElementById('save-btn');
@@ -144,19 +146,17 @@ public class ProfilePage {
           btn.disabled = true;
         }
 
-        // 监听昵称输入
         document.getElementById('nickname').addEventListener('input', () => {
           markDirty();
           hideMsg('profile-msg');
         });
 
-        // 选择头像 → 压缩 → 上传
         document.getElementById('avatar-input').onchange = async (e) => {
           const file = e.target.files[0];
           if (!file) return;
           compressImage(file, 200, async (base64) => {
             try {
-              const res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN), {
+              const res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=avatar', {
                 method: 'POST',
                 body: base64
               });
@@ -189,8 +189,6 @@ public class ProfilePage {
             if (r.ok) {
               currentNickname = r.nickname;
               currentAvatarId = r.avatarId;
-              savedNickname = r.nickname;
-              savedAvatarId = r.avatarId;
               localStorage.setItem('nickname', r.nickname);
               localStorage.setItem('avatarId', r.avatarId == null ? 'null' : r.avatarId);
               renderAvatar();
@@ -205,19 +203,22 @@ public class ProfilePage {
         }
 
         async function changePassword() {
+          const oldPassword = document.getElementById('old-password').value;
           const p1 = document.getElementById('new-password').value;
           const p2 = document.getElementById('new-password2').value;
+          if (!oldPassword) { showMsg('pwd-msg', '请输入旧密码', 'error'); return; }
           if (!p1) { showMsg('pwd-msg', '请输入新密码', 'error'); return; }
           if (p1 !== p2) { showMsg('pwd-msg', '两次输入的密码不一致', 'error'); return; }
           try {
             const res = await fetch('/api/profile/changePassword?token=' + encodeURIComponent(TOKEN), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ newPassword: p1 })
+              body: JSON.stringify({ oldPassword, newPassword: p1 })
             });
             const r = await res.json();
             if (r.ok) {
               showMsg('pwd-msg', '密码修改成功', 'success');
+              document.getElementById('old-password').value = '';
               document.getElementById('new-password').value = '';
               document.getElementById('new-password2').value = '';
             } else {

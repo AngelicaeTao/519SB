@@ -4,18 +4,25 @@ import InfrastructureLayer.DatabaseManager;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
-/** 用户数据存储（SQLite），密码经 SHA-256 哈希 */
+/** 用户数据存储（SQLite），密码用 PBKDF2 加盐哈希 */
 public class UserStore {
+
+    private static final int PBKDF2_ITERATIONS = 10000;
+    private static final int PBKDF2_KEY_LEN = 256;
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     public UserStore() {
     }
 
-    /** 如果没有任何管理员，创建默认管理员 admin / admin123 */
-    public void ensureDefaultAdmin() {
+    /** 如果没有任何管理员，创建默认管理员 */
+    public void ensureDefaultAdmin(String username, String password) {
         int adminCount = 0;
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM users WHERE is_admin = 1")) {
@@ -26,10 +33,10 @@ public class UserStore {
             return;
         }
 
-        // 连接已关闭，再执行注册
         if (adminCount == 0) {
-            if (register("admin", "admin123", "管理员", true)) {
-                System.out.println("[UserStore] 已创建默认管理员：admin / admin123");
+            if (register(username, password, "管理员", true)) {
+                System.out.println("[UserStore] 已创建默认管理员：" + username + " / " + password);
+                System.out.println("[UserStore] 请登录后立即修改管理员密码！");
             } else {
                 System.err.println("[UserStore] 创建默认管理员失败");
             }
@@ -65,19 +72,32 @@ public class UserStore {
         }
     }
 
+    /** 校验密码（兼容旧版纯 SHA-256） */
     public boolean verify(String username, String password) {
         if (username == null || password == null) return false;
+        String stored = null;
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT password_hash FROM users WHERE username = ?")) {
             ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                return rs.getString("password_hash").equals(hash(password));
-            }
+            if (rs.next()) stored = rs.getString("password_hash");
         } catch (SQLException e) {
             System.err.println("[UserStore] 校验失败：" + e.getMessage());
+            return false;
         }
-        return false;
+        if (stored == null) return false;
+
+        // 新格式（salt:hash）或旧格式（纯 SHA-256）
+        if (stored.contains(":")) {
+            return verifyPBKDF2(password, stored);
+        } else {
+            // 旧格式，验证通过后自动升级为 PBKDF2
+            if (stored.equals(legacySha256(password))) {
+                changePassword(username, password);
+                return true;
+            }
+            return false;
+        }
     }
 
     public User getUser(String username) {
@@ -87,9 +107,7 @@ public class UserStore {
                      "SELECT username, nickname, avatar_id, is_admin, created_at FROM users WHERE username = ?")) {
             ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
-            if (rs.next()) {
-                return mapUser(rs);
-            }
+            if (rs.next()) return mapUser(rs);
         } catch (SQLException e) {
             System.err.println("[UserStore] 查询失败：" + e.getMessage());
         }
@@ -130,9 +148,7 @@ public class UserStore {
              PreparedStatement ps = conn.prepareStatement(
                      "SELECT username, nickname, avatar_id, is_admin, created_at FROM users ORDER BY created_at ASC")) {
             ResultSet rs = ps.executeQuery();
-            while (rs.next()) {
-                result.add(mapUser(rs));
-            }
+            while (rs.next()) result.add(mapUser(rs));
         } catch (SQLException e) {
             System.err.println("[UserStore] 列出用户失败：" + e.getMessage());
         }
@@ -173,7 +189,6 @@ public class UserStore {
         return getUser(username) != null;
     }
 
-    /** 删除用户 */
     public boolean delete(String username) {
         if (username == null) return false;
         try (Connection conn = DatabaseManager.getConnection();
@@ -186,7 +201,6 @@ public class UserStore {
         }
     }
 
-    /** 删除用户的所有聊天消息 */
     public void deleteUserMessages(String username) {
         if (username == null) return;
         try (Connection conn = DatabaseManager.getConnection();
@@ -208,15 +222,60 @@ public class UserStore {
         return u;
     }
 
+    // ==================== 密码哈希 ====================
+
     private String hash(String password) {
         try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = md.digest(password.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : bytes) sb.append(String.format("%02x", b));
-            return sb.toString();
+            byte[] salt = new byte[16];
+            RANDOM.nextBytes(salt);
+            byte[] hashBytes = pbkdf2(password.toCharArray(), salt);
+            return toHex(salt) + ":" + toHex(hashBytes);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private boolean verifyPBKDF2(String password, String stored) {
+        try {
+            int sep = stored.indexOf(':');
+            byte[] salt = fromHex(stored.substring(0, sep));
+            byte[] expected = fromHex(stored.substring(sep + 1));
+            byte[] actual = pbkdf2(password.toCharArray(), salt);
+            return MessageDigest.isEqual(expected, actual);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private byte[] pbkdf2(char[] password, byte[] salt) throws Exception {
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        PBEKeySpec spec = new PBEKeySpec(password, salt, PBKDF2_ITERATIONS, PBKDF2_KEY_LEN);
+        return factory.generateSecret(spec).getEncoded();
+    }
+
+    private String legacySha256(String password) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = md.digest(password.getBytes(StandardCharsets.UTF_8));
+            return toHex(bytes);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private String toHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) sb.append(String.format("%02x", b));
+        return sb.toString();
+    }
+
+    private byte[] fromHex(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
     }
 }

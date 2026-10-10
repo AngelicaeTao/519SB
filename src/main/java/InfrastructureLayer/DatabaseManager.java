@@ -23,7 +23,11 @@ public class DatabaseManager {
     }
 
     public static Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(DB_URL);
+        Connection conn = DriverManager.getConnection(DB_URL);
+        try (Statement st = conn.createStatement()) {
+            st.execute("PRAGMA busy_timeout = 5000");
+        }
+        return conn;
     }
 
     public static void init() {
@@ -34,6 +38,10 @@ public class DatabaseManager {
         }
 
         try (Connection conn = getConnection(); Statement st = conn.createStatement()) {
+            // WAL 模式
+            st.execute("PRAGMA journal_mode = WAL");
+            st.execute("PRAGMA synchronous = NORMAL");
+
             // 用户表
             st.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -63,59 +71,30 @@ public class DatabaseManager {
                 CREATE TABLE IF NOT EXISTS images (
                     id TEXT PRIMARY KEY,
                     data BLOB NOT NULL,
+                    type TEXT NOT NULL DEFAULT 'message',
                     created_at INTEGER NOT NULL
                 )
             """);
 
-            // 帖子表
+            // 会话表（持久化，重启服务器后仍有效）
             st.execute("""
-                CREATE TABLE IF NOT EXISTS posts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    author TEXT NOT NULL,
-                    created_at INTEGER NOT NULL,
-                    updated_at INTEGER NOT NULL,
-                    views INTEGER NOT NULL DEFAULT 0
+                CREATE TABLE IF NOT EXISTS sessions (
+                    token TEXT PRIMARY KEY,
+                    username TEXT NOT NULL,
+                    last_active INTEGER NOT NULL
                 )
             """);
 
-            // 帖子点赞表
-            st.execute("""
-                CREATE TABLE IF NOT EXISTS post_likes (
-                    post_id INTEGER NOT NULL,
-                    username TEXT NOT NULL,
-                    created_at INTEGER NOT NULL,
-                    PRIMARY KEY (post_id, username)
-                )
-            """);
-
-            // 帖子评论表
-            st.execute("""
-                CREATE TABLE IF NOT EXISTS post_comments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    post_id INTEGER NOT NULL,
-                    username TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    parent_id INTEGER DEFAULT NULL,
-                    created_at INTEGER NOT NULL
-                    )
-            """);
-
-            // 老数据库迁移：给 post_comments 加 parent_id 列
+            // 兼容旧库：images 表可能没有 type 字段
             try {
-                st.execute("ALTER TABLE post_comments ADD COLUMN parent_id INTEGER DEFAULT NULL");
-                System.out.println("[DB] 已为 post_comments 添加 parent_id 列");
-            } catch (SQLException ignored) {
-                // 已经存在，忽略
-            }
+                st.execute("ALTER TABLE images ADD COLUMN type TEXT NOT NULL DEFAULT 'message'");
+            } catch (SQLException ignored) {}
 
-            st.execute("CREATE INDEX IF NOT EXISTS idx_comments_post ON post_comments(post_id)");
-            st.execute("CREATE INDEX IF NOT EXISTS idx_comments_parent ON post_comments(parent_id)");
+            // 索引
             st.execute("CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_messages_username ON messages(username)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_images_created ON images(created_at)");
-            st.execute("CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author)");
-            st.execute("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active)");
 
             System.out.println("[DB] 数据库初始化完成：" + DB_URL);
         } catch (SQLException e) {
