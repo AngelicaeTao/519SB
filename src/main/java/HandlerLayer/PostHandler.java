@@ -273,6 +273,7 @@ public class PostHandler implements HttpHandler {
                 + ",\"title\":\"" + HttpUtil.escapeJson(p.title) + "\""
                 + ",\"content\":\"" + HttpUtil.escapeJson(p.content) + "\""
                 + ",\"author\":\"" + HttpUtil.escapeJson(p.author) + "\""
+                + ",\"authorNickname\":\"" + HttpUtil.escapeJson(p.authorNickname == null ? p.author : p.authorNickname) + "\""
                 + ",\"createdAt\":" + p.createdAt
                 + ",\"updatedAt\":" + p.updatedAt
                 + ",\"views\":" + p.views + "}";

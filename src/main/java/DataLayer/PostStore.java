@@ -32,8 +32,10 @@ public class PostStore {
     }
 
     public Post getById(long id) {
-        String sql = "SELECT id, title, content, author, created_at, updated_at, views " +
-                "FROM posts WHERE id = ?";
+        String sql = "SELECT p.id, p.title, p.content, p.author, p.created_at, p.updated_at, p.views, " +
+                "COALESCE(u.nickname, p.author) AS author_nickname " +
+                "FROM posts p LEFT JOIN users u ON p.author = u.username " +
+                "WHERE p.id = ?";
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, id);
@@ -49,8 +51,10 @@ public class PostStore {
     /** 全部帖子，按 id 倒序（最新在前） */
     public List<Post> listAll() {
         List<Post> result = new ArrayList<>();
-        String sql = "SELECT id, title, content, author, created_at, updated_at, views " +
-                "FROM posts ORDER BY id DESC";
+        String sql = "SELECT p.id, p.title, p.content, p.author, p.created_at, p.updated_at, p.views, " +
+                "COALESCE(u.nickname, p.author) AS author_nickname " +
+                "FROM posts p LEFT JOIN users u ON p.author = u.username " +
+                "ORDER BY p.id DESC";
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql);
              ResultSet rs = ps.executeQuery()) {
@@ -103,6 +107,7 @@ public class PostStore {
         p.title = rs.getString("title");
         p.content = rs.getString("content");
         p.author = rs.getString("author");
+        p.authorNickname = rs.getString("author_nickname");
         p.createdAt = rs.getLong("created_at");
         p.updatedAt = rs.getLong("updated_at");
         p.views = rs.getInt("views");
@@ -178,9 +183,8 @@ public class PostStore {
         }
     }
 
-// ==================== 评论 ====================
+    // ==================== 评论 ====================
 
-    /** 发表评论，返回新评论 id；失败返回 -1 */
     /** 发表评论/回复，parentId 为 null 表示顶级评论；返回新 id，失败返回 -1 */
     public long addComment(long postId, String username, String content, Long parentId) {
         String sql = "INSERT INTO post_comments(post_id, username, content, parent_id, created_at) " +
@@ -218,11 +222,14 @@ public class PostStore {
         return 0;
     }
 
-    /** 查帖子所有评论（带 parentId、昵称、头像），按 id 升序 */
+    /** 查帖子所有评论（带 parentId、昵称、头像、被回复者昵称），按 id 升序 */
     public List<String> listComments(long postId) {
         List<String> result = new ArrayList<>();
         String sql = "SELECT c.id, c.username, c.content, c.parent_id, c.created_at, " +
-                "COALESCE(u.nickname, c.username) AS nickname, u.avatar_id " +
+                "COALESCE(u.nickname, c.username) AS nickname, u.avatar_id, " +
+                "(SELECT COALESCE(u2.nickname, c2.username) FROM post_comments c2 " +
+                " LEFT JOIN users u2 ON c2.username = u2.username " +
+                " WHERE c2.id = c.parent_id) AS reply_to_nick " +
                 "FROM post_comments c LEFT JOIN users u ON c.username = u.username " +
                 "WHERE c.post_id = ? ORDER BY c.id ASC";
         try (Connection conn = DatabaseManager.getConnection();
@@ -233,12 +240,14 @@ public class PostStore {
                     String avatarId = rs.getString("avatar_id");
                     long parentId = rs.getLong("parent_id");
                     boolean parentIsNull = rs.wasNull();
+                    String replyToNick = rs.getString("reply_to_nick");
                     String json = "{\"id\":" + rs.getLong("id")
                             + ",\"username\":\"" + InfrastructureLayer.HttpUtil.escapeJson(rs.getString("username")) + "\""
                             + ",\"nickname\":\"" + InfrastructureLayer.HttpUtil.escapeJson(rs.getString("nickname")) + "\""
                             + ",\"avatarId\":" + (avatarId == null ? "null" : "\"" + InfrastructureLayer.HttpUtil.escapeJson(avatarId) + "\"")
                             + ",\"content\":\"" + InfrastructureLayer.HttpUtil.escapeJson(rs.getString("content")) + "\""
                             + ",\"parentId\":" + (parentIsNull ? "null" : parentId)
+                            + ",\"replyToNick\":" + (replyToNick == null ? "null" : "\"" + InfrastructureLayer.HttpUtil.escapeJson(replyToNick) + "\"")
                             + ",\"createdAt\":" + rs.getLong("created_at") + "}";
                     result.add(json);
                 }

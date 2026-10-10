@@ -12,15 +12,19 @@ public class PostPage {
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
-          #header { background: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 10; }
-          #header h1 { font-size: 16px; color: #333; }
-          #header .right a, #header .right button {
-            font-size: 13px; padding: 6px 12px; border: 1px solid #07c160;
-            background: #fff; color: #07c160; border-radius: 6px;
-            cursor: pointer; text-decoration: none; margin-left: 8px; font-family: inherit;
-          }
-          #header .right button.primary { background: #07c160; color: #fff; }
+          #header { background: #fff; padding: 10px 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; }
+          #header .title { font-size: 15px; font-weight: bold; }
+          #header .right { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #666; }
+          #header .right a, #header .right button { font-size: 12px; padding: 5px 10px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; color: #666; text-decoration: none; font-family: inherit; }
+          #header .right a:hover, #header .right button:hover { background: #f5f5f5; }
+          #header .right a.primary { border-color: #07c160; color: #07c160; }
+          #header .right button.primary { background: #07c160; color: #fff; border-color: #07c160; }
           #header .right button.primary:hover { background: #06ad56; }
+          #header .right button.online-btn { border-color: #07c160; color: #07c160; }
+          #header .right button.online-btn.active { background: #07c160; color: #fff; }
+          .my-avatar { width: 28px; height: 28px; border-radius: 50%; background: #07c160; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; overflow: hidden; cursor: pointer; text-decoration: none; }
+          .my-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
           .container { max-width: 720px; margin: 20px auto; padding: 0 15px; }
           .post-card {
             background: #fff; border-radius: 12px; padding: 18px 20px;
@@ -32,7 +36,44 @@ public class PostPage {
           .post-card .excerpt { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 10px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
           .post-card .meta { font-size: 12px; color: #999; display: flex; gap: 12px; }
           .empty { text-align: center; color: #999; padding: 40px; }
-          .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+
+          /* 在线用户抽屉 */
+          #sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 220px;
+            background: #fff;
+            border-left: 1px solid #e5e5e5;
+            overflow-y: auto;
+            padding: 12px 10px;
+            font-size: 13px;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.08);
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+            z-index: 200;
+          }
+          #sidebar.show { transform: translateX(0); }
+          #sidebar h3 { font-size: 12px; color: #999; font-weight: normal; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+          #sidebar h3 .close-btn { font-size: 16px; color: #999; cursor: pointer; background: none; border: none; padding: 0 4px; line-height: 1; }
+          #sidebar h3 .close-btn:hover { color: #333; }
+          .online-user { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; color: #333; }
+          .online-user .dot { width: 8px; height: 8px; border-radius: 50%; background: #07c160; flex-shrink: 0; }
+          .online-user .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .online-user .avatar { width: 24px; height: 24px; border-radius: 50%; background: #bbb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; flex-shrink: 0; }
+          .online-user .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+          #sidebar-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.15);
+            display: none;
+            z-index: 150;
+          }
+          #sidebar-mask.show { display: block; }
+
+          .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 300; padding: 20px; }
           .mask.show { display: flex; }
           .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
           .modal h3 { font-size: 16px; margin-bottom: 16px; color: #333; }
@@ -51,13 +92,27 @@ public class PostPage {
           .msg.error { background: #fee; color: #c33; }
         </style></head><body>
         <div id="header">
-          <h1>519SB 帖子</h1>
+          <span class="title">519SB 帖子</span>
           <div class="right">
-            <a href="/chat">聊天室</a>
+            <a href="/chat" class="primary">聊天室</a>
             <button id="new-btn" class="primary">发帖</button>
+            <button id="online-btn" class="online-btn">在线 <span id="online-count">0</span></button>
+            <a id="admin-link" href="/admin" style="display:none;">管理</a>
+            <a href="/profile" title="个人中心"><span class="my-avatar" id="my-avatar"></span></a>
+            <span id="my-nickname"></span>
+            <button onclick="doLogout()">退出</button>
           </div>
         </div>
         <div class="container" id="list"></div>
+
+        <div id="sidebar-mask" onclick="toggleSidebar(false)"></div>
+        <div id="sidebar">
+          <h3>
+            <span>在线用户</span>
+            <button class="close-btn" onclick="toggleSidebar(false)" title="关闭">×</button>
+          </h3>
+          <div id="online-list"></div>
+        </div>
 
         <div class="mask" id="edit-mask">
           <div class="modal">
@@ -74,8 +129,113 @@ public class PostPage {
 
         <script>
         const TOKEN = localStorage.getItem('token');
+        const MY_NICKNAME = localStorage.getItem('nickname') || localStorage.getItem('username') || '';
+        const MY_AVATAR = localStorage.getItem('avatarId') || null;
+        const IS_ADMIN = localStorage.getItem('isAdmin') === 'true';
         if (!TOKEN) { location.href = '/login'; }
 
+        var ONLINE_REFRESH_INTERVAL = 10000;
+        var lastOnlineSignature = '';
+        var sidebar = document.getElementById('sidebar');
+        var sidebarMask = document.getElementById('sidebar-mask');
+        var onlineBtn = document.getElementById('online-btn');
+
+        // 顶部信息
+        document.getElementById('my-nickname').textContent = MY_NICKNAME;
+        if (IS_ADMIN) {
+          var adminLink = document.getElementById('admin-link');
+          adminLink.style.display = 'inline-block';
+          adminLink.href = '/admin?token=' + encodeURIComponent(TOKEN);
+        }
+
+        function renderMyAvatar() {
+          const el = document.getElementById('my-avatar');
+          el.innerHTML = '';
+          if (MY_AVATAR && MY_AVATAR !== 'null') {
+            const img = document.createElement('img');
+            img.src = '/image/' + MY_AVATAR;
+            el.appendChild(img);
+          } else {
+            el.textContent = MY_NICKNAME.charAt(0).toUpperCase();
+          }
+        }
+        renderMyAvatar();
+
+        function doLogout() {
+          if (!confirm('确定退出登录？')) return;
+          fetch('/api/logout?token=' + encodeURIComponent(TOKEN), { method: 'POST' }).finally(() => {
+            localStorage.clear();
+            location.href = '/login';
+          });
+        }
+
+        // ==================== 侧边栏 ====================
+        function toggleSidebar(show) {
+          if (typeof show === 'undefined') show = !sidebar.classList.contains('show');
+          if (show) {
+            sidebar.classList.add('show');
+            sidebarMask.classList.add('show');
+            onlineBtn.classList.add('active');
+            loadOnlineUsers();
+          } else {
+            sidebar.classList.remove('show');
+            sidebarMask.classList.remove('show');
+            onlineBtn.classList.remove('active');
+          }
+        }
+        onlineBtn.onclick = function () { toggleSidebar(); };
+
+        async function loadOnlineUsers() {
+          try {
+            var res = await fetch('/online?token=' + encodeURIComponent(TOKEN));
+            var r = await res.json();
+            if (!r.ok) return;
+            renderOnlineUsers(r.users);
+          } catch (e) {}
+        }
+
+        function renderOnlineUsers(users) {
+          document.getElementById('online-count').textContent = users.length;
+
+          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || ''); }).join('|');
+          if (sig === lastOnlineSignature) return;
+          lastOnlineSignature = sig;
+
+          var list = document.getElementById('online-list');
+          list.innerHTML = '';
+          if (users.length === 0) {
+            var empty = document.createElement('div');
+            empty.style.color = '#999';
+            empty.style.fontSize = '12px';
+            empty.style.padding = '10px 4px';
+            empty.textContent = '暂无在线用户';
+            list.appendChild(empty);
+            return;
+          }
+          for (var i = 0; i < users.length; i++) {
+            var u = users[i];
+            var div = document.createElement('div');
+            div.className = 'online-user';
+            var dot = document.createElement('span'); dot.className = 'dot';
+            var av = document.createElement('div'); av.className = 'avatar';
+            if (u.avatarId) {
+              var img = document.createElement('img');
+              img.src = '/image/' + u.avatarId;
+              av.appendChild(img);
+            } else {
+              av.textContent = (u.nickname || u.username).charAt(0).toUpperCase();
+            }
+            var name = document.createElement('span'); name.className = 'name';
+            name.textContent = u.nickname || u.username;
+            div.appendChild(dot); div.appendChild(av); div.appendChild(name);
+            list.appendChild(div);
+          }
+        }
+
+        loadOnlineUsers();
+        setInterval(loadOnlineUsers, ONLINE_REFRESH_INTERVAL);
+
+        // ==================== 帖子列表 ====================
         function fmtTime(ms) {
           const d = new Date(ms);
           return d.getFullYear() + '-' +
@@ -118,7 +278,8 @@ public class PostPage {
 
             const meta = document.createElement('div');
             meta.className = 'meta';
-            const a = document.createElement('span'); a.textContent = 'by ' + p.author;
+            const a = document.createElement('span');
+            a.textContent = 'by ' + (p.authorNickname || p.author);
             const t = document.createElement('span'); t.textContent = fmtTime(p.createdAt);
             const v = document.createElement('span'); v.textContent = p.views + ' 阅读';
             meta.appendChild(a); meta.appendChild(t); meta.appendChild(v);
@@ -170,6 +331,10 @@ public class PostPage {
           }
         }
 
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') toggleSidebar(false);
+        });
+
         document.getElementById('new-btn').onclick = openEdit;
         loadList();
         </script></body></html>
@@ -188,14 +353,17 @@ public class PostPage {
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
-          #header { background: #fff; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.08); position: sticky; top: 0; z-index: 10; }
-          #header h1 { font-size: 16px; color: #333; }
-          #header .right a {
-            font-size: 13px; padding: 6px 12px; border: 1px solid #07c160;
-            background: #fff; color: #07c160; border-radius: 6px;
-            cursor: pointer; text-decoration: none; margin-left: 8px;
-          }
-          #header .right a:hover { background: #07c160; color: #fff; }
+          #header { background: #fff; padding: 10px 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; }
+          #header .title { font-size: 15px; font-weight: bold; }
+          #header .right { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #666; }
+          #header .right a, #header .right button { font-size: 12px; padding: 5px 10px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; color: #666; text-decoration: none; font-family: inherit; }
+          #header .right a:hover, #header .right button:hover { background: #f5f5f5; }
+          #header .right a.primary { border-color: #07c160; color: #07c160; }
+          #header .right button.online-btn { border-color: #07c160; color: #07c160; }
+          #header .right button.online-btn.active { background: #07c160; color: #fff; }
+          .my-avatar { width: 28px; height: 28px; border-radius: 50%; background: #07c160; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; overflow: hidden; cursor: pointer; text-decoration: none; }
+          .my-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
           .container { max-width: 720px; margin: 20px auto; padding: 0 15px; }
           .post { background: #fff; border-radius: 12px; padding: 28px 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
           .post h1 { font-size: 24px; color: #222; line-height: 1.4; margin-bottom: 12px; }
@@ -208,7 +376,6 @@ public class PostPage {
           .actions .btn-red { background: #ff5757; color: #fff; }
           .actions .btn-red:hover { background: #e74c4c; }
 
-          /* 点赞 */
           .like-bar { text-align: center; margin-top: 20px; }
           .like-btn {
             display: inline-flex; align-items: center; gap: 8px;
@@ -228,7 +395,6 @@ public class PostPage {
             100% { transform: scale(1); }
           }
 
-          /* 评论 */
           .comments { background: #fff; border-radius: 12px; padding: 24px 32px; margin-top: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
           .comments-title { font-size: 16px; color: #333; margin-bottom: 18px; }
           .comments-title span { color: #999; font-weight: normal; font-size: 14px; }
@@ -251,7 +417,6 @@ public class PostPage {
 
           .comment-list { margin-top: 24px; }
 
-          /* 顶级评论 */
           .comment-item { display: flex; gap: 12px; padding: 16px 0; border-top: 1px solid #f5f5f5; }
           .comment-item:first-child { border-top: none; }
           .comment-avatar {
@@ -273,7 +438,6 @@ public class PostPage {
           .comment-op.del:hover { color: #ff5757; background: #fff0f0; }
           .comment-text { font-size: 14px; color: #444; line-height: 1.7; word-wrap: break-word; white-space: pre-wrap; }
 
-          /* 回复列表 */
           .reply-list { margin-top: 12px; padding-left: 16px; border-left: 2px solid #f0f0f0; }
           .reply-item { display: flex; gap: 10px; padding: 10px 0; }
           .reply-avatar {
@@ -297,7 +461,6 @@ public class PostPage {
           .reply-op:hover { color: #07c160; background: #f0fff5; }
           .reply-op.del:hover { color: #ff5757; background: #fff0f0; }
 
-          /* 内联回复输入框 */
           .reply-form {
             margin-top: 10px; padding: 12px;
             background: #fafafa; border-radius: 10px;
@@ -320,7 +483,43 @@ public class PostPage {
 
           .comment-empty { text-align: center; color: #bbb; padding: 30px; font-size: 14px; }
 
-          .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+          /* 在线用户抽屉 */
+          #sidebar {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 220px;
+            background: #fff;
+            border-left: 1px solid #e5e5e5;
+            overflow-y: auto;
+            padding: 12px 10px;
+            font-size: 13px;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.08);
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+            z-index: 200;
+          }
+          #sidebar.show { transform: translateX(0); }
+          #sidebar h3 { font-size: 12px; color: #999; font-weight: normal; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+          #sidebar h3 .close-btn { font-size: 16px; color: #999; cursor: pointer; background: none; border: none; padding: 0 4px; line-height: 1; }
+          #sidebar h3 .close-btn:hover { color: #333; }
+          .online-user { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; color: #333; }
+          .online-user .dot { width: 8px; height: 8px; border-radius: 50%; background: #07c160; flex-shrink: 0; }
+          .online-user .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+          .online-user .avatar { width: 24px; height: 24px; border-radius: 50%; background: #bbb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; flex-shrink: 0; }
+          .online-user .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+          #sidebar-mask {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.15);
+            display: none;
+            z-index: 150;
+          }
+          #sidebar-mask.show { display: block; }
+
+          .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 300; padding: 20px; }
           .mask.show { display: flex; }
           .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
           .modal h3 { font-size: 16px; margin-bottom: 16px; color: #333; }
@@ -339,10 +538,15 @@ public class PostPage {
           .msg.error { background: #fee; color: #c33; }
         </style></head><body>
         <div id="header">
-          <h1>519SB 帖子</h1>
+          <span class="title">519SB 帖子</span>
           <div class="right">
-            <a href="/posts">帖子列表</a>
-            <a href="/chat">聊天室</a>
+            <a href="/posts" class="primary">帖子列表</a>
+            <a href="/chat" class="primary">聊天室</a>
+            <button id="online-btn" class="online-btn">在线 <span id="online-count">0</span></button>
+            <a id="admin-link" href="/admin" style="display:none;">管理</a>
+            <a href="/profile" title="个人中心"><span class="my-avatar" id="my-avatar"></span></a>
+            <span id="my-nickname"></span>
+            <button onclick="doLogout()">退出</button>
           </div>
         </div>
         <div class="container">
@@ -377,6 +581,15 @@ public class PostPage {
           </div>
         </div>
 
+        <div id="sidebar-mask" onclick="toggleSidebar(false)"></div>
+        <div id="sidebar">
+          <h3>
+            <span>在线用户</span>
+            <button class="close-btn" onclick="toggleSidebar(false)" title="关闭">×</button>
+          </h3>
+          <div id="online-list"></div>
+        </div>
+
         <div class="mask" id="edit-mask">
           <div class="modal">
             <h3>编辑帖子</h3>
@@ -393,12 +606,112 @@ public class PostPage {
         <script>
         const TOKEN = localStorage.getItem('token');
         const MY_USERNAME = localStorage.getItem('username') || '';
+        const MY_NICKNAME = localStorage.getItem('nickname') || MY_USERNAME;
+        const MY_AVATAR = localStorage.getItem('avatarId') || null;
         const IS_ADMIN = localStorage.getItem('isAdmin') === 'true';
         if (!TOKEN) { location.href = '/login'; }
         const POST_ID = __POST_ID__;
         let currentPost = null;
         let allComments = [];
 
+        var ONLINE_REFRESH_INTERVAL = 10000;
+        var lastOnlineSignature = '';
+        var sidebar = document.getElementById('sidebar');
+        var sidebarMask = document.getElementById('sidebar-mask');
+        var onlineBtn = document.getElementById('online-btn');
+
+        // 顶部信息
+        document.getElementById('my-nickname').textContent = MY_NICKNAME;
+        if (IS_ADMIN) document.getElementById('admin-link').style.display = 'inline-block';
+
+        function renderMyAvatar() {
+          const el = document.getElementById('my-avatar');
+          el.innerHTML = '';
+          if (MY_AVATAR && MY_AVATAR !== 'null') {
+            const img = document.createElement('img');
+            img.src = '/image/' + MY_AVATAR;
+            el.appendChild(img);
+          } else {
+            el.textContent = MY_NICKNAME.charAt(0).toUpperCase();
+          }
+        }
+        renderMyAvatar();
+
+        function doLogout() {
+          if (!confirm('确定退出登录？')) return;
+          fetch('/api/logout?token=' + encodeURIComponent(TOKEN), { method: 'POST' }).finally(() => {
+            localStorage.clear();
+            location.href = '/login';
+          });
+        }
+
+        // ==================== 侧边栏 ====================
+        function toggleSidebar(show) {
+          if (typeof show === 'undefined') show = !sidebar.classList.contains('show');
+          if (show) {
+            sidebar.classList.add('show');
+            sidebarMask.classList.add('show');
+            onlineBtn.classList.add('active');
+            loadOnlineUsers();
+          } else {
+            sidebar.classList.remove('show');
+            sidebarMask.classList.remove('show');
+            onlineBtn.classList.remove('active');
+          }
+        }
+        onlineBtn.onclick = function () { toggleSidebar(); };
+
+        async function loadOnlineUsers() {
+          try {
+            var res = await fetch('/online?token=' + encodeURIComponent(TOKEN));
+            var r = await res.json();
+            if (!r.ok) return;
+            renderOnlineUsers(r.users);
+          } catch (e) {}
+        }
+
+        function renderOnlineUsers(users) {
+          document.getElementById('online-count').textContent = users.length;
+
+          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || ''); }).join('|');
+          if (sig === lastOnlineSignature) return;
+          lastOnlineSignature = sig;
+
+          var list = document.getElementById('online-list');
+          list.innerHTML = '';
+          if (users.length === 0) {
+            var empty = document.createElement('div');
+            empty.style.color = '#999';
+            empty.style.fontSize = '12px';
+            empty.style.padding = '10px 4px';
+            empty.textContent = '暂无在线用户';
+            list.appendChild(empty);
+            return;
+          }
+          for (var i = 0; i < users.length; i++) {
+            var u = users[i];
+            var div = document.createElement('div');
+            div.className = 'online-user';
+            var dot = document.createElement('span'); dot.className = 'dot';
+            var av = document.createElement('div'); av.className = 'avatar';
+            if (u.avatarId) {
+              var img = document.createElement('img');
+              img.src = '/image/' + u.avatarId;
+              av.appendChild(img);
+            } else {
+              av.textContent = (u.nickname || u.username).charAt(0).toUpperCase();
+            }
+            var name = document.createElement('span'); name.className = 'name';
+            name.textContent = u.nickname || u.username;
+            div.appendChild(dot); div.appendChild(av); div.appendChild(name);
+            list.appendChild(div);
+          }
+        }
+
+        loadOnlineUsers();
+        setInterval(loadOnlineUsers, ONLINE_REFRESH_INTERVAL);
+
+        // ==================== 帖子详情 ====================
         function fmtTime(ms) {
           const d = new Date(ms);
           return d.getFullYear() + '-' +
@@ -427,7 +740,7 @@ public class PostPage {
           document.title = p.title + ' - 519SB';
           document.getElementById('post-title').textContent = p.title;
           document.getElementById('post-meta').textContent =
-            'by ' + p.author + ' · ' + fmtTime(p.createdAt) + ' · ' + p.views + ' 阅读';
+            'by ' + (p.authorNickname || p.author) + ' · ' + fmtTime(p.createdAt) + ' · ' + p.views + ' 阅读';
           document.getElementById('post-content').textContent = p.content;
 
           if (MY_USERNAME === p.author || IS_ADMIN) {
@@ -467,7 +780,6 @@ public class PostPage {
           } catch (e) { alert('网络错误：' + e.message); }
         };
 
-        // ---------- 评论加载与渲染 ----------
         async function loadComments() {
           const list = document.getElementById('comment-list');
           try {
@@ -640,7 +952,6 @@ public class PostPage {
           return item;
         }
 
-        // ---------- 回复输入框 ----------
         function openReplyForm(topCommentItem, parentId, targetNick) {
           document.querySelectorAll('.reply-form-box').forEach(b => {
             b.style.display = 'none';
@@ -705,7 +1016,6 @@ public class PostPage {
           ta.focus();
         }
 
-        // ---------- 发顶级评论 ----------
         document.getElementById('comment-submit').onclick = async () => {
           const input = document.getElementById('comment-input');
           const content = input.value.trim();
@@ -735,7 +1045,6 @@ public class PostPage {
           }
         };
 
-        // ---------- 删除评论 ----------
         async function deleteComment(id, itemEl) {
           if (!confirm('确定删除这条评论？')) return;
           try {
@@ -753,7 +1062,6 @@ public class PostPage {
           } catch (e) { alert('网络错误：' + e.message); }
         }
 
-        // ---------- 编辑帖子 ----------
         function openEdit() {
           if (!currentPost) return;
           document.getElementById('edit-title').value = currentPost.title;
@@ -800,6 +1108,10 @@ public class PostPage {
             else alert(r.msg || '删除失败');
           } catch (e) { alert('网络错误：' + e.message); }
         }
+
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape') toggleSidebar(false);
+        });
 
         document.getElementById('edit-btn').onclick = openEdit;
         document.getElementById('del-btn').onclick = deletePost;

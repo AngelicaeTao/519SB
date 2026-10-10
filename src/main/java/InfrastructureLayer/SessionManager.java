@@ -4,7 +4,9 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -13,6 +15,9 @@ public class SessionManager {
 
     /** 过期时间（天），从 config.properties 读取 */
     private static final long TTL_MS = ConfigurationLayer.Config.SESSION_TTL_DAYS * 24L * 3600 * 1000;
+
+    /** 判断"在线"的活跃时间窗口（毫秒）：60 秒内有过请求才算在线 */
+    private static final long ONLINE_WINDOW_MS = 60_000;
 
     /** 内存缓存，避免每次请求都查库 */
     private final Map<String, Session> cache = new ConcurrentHashMap<>();
@@ -57,7 +62,12 @@ public class SessionManager {
                 removeSession(token);
                 return null;
             }
+            long oldLast = s.lastActive;
             s.lastActive = now;
+            // 只有超过 5 秒才写库，减少数据库压力
+            if (now - oldLast > 5000) {
+                updateLastActive(token, now);
+            }
             return s.username;
         }
 
@@ -75,19 +85,12 @@ public class SessionManager {
                     }
                     String username = rs.getString("username");
 
-                    // 恢复缓存
                     Session ns = new Session();
                     ns.username = username;
                     ns.lastActive = now;
                     cache.put(token, ns);
 
-                    // 更新数据库中的活跃时间
-                    try (PreparedStatement up = conn.prepareStatement(
-                            "UPDATE sessions SET last_active = ? WHERE token = ?")) {
-                        up.setLong(1, now);
-                        up.setString(2, token);
-                        up.executeUpdate();
-                    } catch (SQLException ignored) {}
+                    updateLastActive(token, now);
 
                     return username;
                 }
@@ -96,6 +99,16 @@ public class SessionManager {
             System.err.println("[Session] 查询失败：" + e.getMessage());
         }
         return null;
+    }
+
+    private void updateLastActive(String token, long now) {
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement up = conn.prepareStatement(
+                     "UPDATE sessions SET last_active = ? WHERE token = ?")) {
+            up.setLong(1, now);
+            up.setString(2, token);
+            up.executeUpdate();
+        } catch (SQLException ignored) {}
     }
 
     public void removeSession(String token) {
@@ -118,6 +131,36 @@ public class SessionManager {
             ps.setString(1, username);
             ps.executeUpdate();
         } catch (SQLException ignored) {}
+    }
+
+    /**
+     * 返回当前「在线」的用户名（去重）。
+     * 在线定义：最近 ONLINE_WINDOW_MS（60 秒）内有过任意请求。
+     */
+    public Set<String> listOnlineUsers() {
+        long cutoff = System.currentTimeMillis() - ONLINE_WINDOW_MS;
+        Set<String> result = new HashSet<>();
+
+        // 1. 内存缓存
+        for (Session s : cache.values()) {
+            if (s.lastActive > cutoff) result.add(s.username);
+        }
+
+        // 2. SQLite（覆盖服务器重启后缓存未恢复的情况）
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT DISTINCT username FROM sessions WHERE last_active > ?")) {
+            ps.setLong(1, cutoff);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    result.add(rs.getString("username"));
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[Session] 查询在线用户失败：" + e.getMessage());
+        }
+
+        return result;
     }
 
     /** 定期清理过期会话 */

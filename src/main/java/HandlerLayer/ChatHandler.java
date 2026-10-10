@@ -114,6 +114,12 @@ public class ChatHandler {
             return;
         }
 
+        // SSE 连接数限制：每用户最多 N 个
+        if (sse.countConnectionsFor(username) >= BootstrapLayer.ChatServer.SSE_MAX_PER_USER) {
+            HttpUtil.sendText(ex, 429, "too many connections");
+            return;
+        }
+
         ex.getResponseHeaders().set("Content-Type", "text/event-stream; charset=utf-8");
         ex.getResponseHeaders().set("Cache-Control", "no-cache");
         ex.getResponseHeaders().set("Connection", "keep-alive");
@@ -123,11 +129,9 @@ public class ChatHandler {
         sse.register(os, username);
 
         try {
-            // 只回放最近 30 条，更早的让前端滚到顶时通过 /history 拉
             for (String msg : store.recent(INITIAL_HISTORY)) {
                 sse.sendTo(os, msg);
             }
-            // 发一个特殊事件，告诉前端历史回放结束了
             os.write("data: {\"type\":\"history_end\"}\n\n".getBytes(StandardCharsets.UTF_8));
             os.flush();
 
@@ -173,7 +177,7 @@ public class ChatHandler {
         }
     }
 
-    /** GET /online?token=xxx */
+    /** GET /online?token=xxx  返回最近 60 秒内有活动的用户 */
     public void handleOnline(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         if (sessions.getUser(token) == null) {
@@ -181,7 +185,8 @@ public class ChatHandler {
             return;
         }
 
-        Set<String> users = sse.listOnlineUsers();
+        // 在线 = 最近 60 秒内有任意请求
+        Set<String> users = sessions.listOnlineUsers();
         StringBuilder sb = new StringBuilder("{\"ok\":true,\"users\":[");
         boolean first = true;
         for (String u : users) {

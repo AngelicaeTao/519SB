@@ -25,6 +25,7 @@ public class AdminPage {
           .avatar img { width: 100%; height: 100%; object-fit: cover; }
           .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #ffe; color: #c90; }
           .badge.admin { background: #e7f5ff; color: #1971c2; }
+          .badge.default-admin { background: #ffe0e0; color: #c33; margin-left: 4px; }
           .btn { padding: 5px 12px; font-size: 12px; border: none; border-radius: 5px; cursor: pointer; margin-right: 4px; }
           .btn-primary { background: #07c160; color: #fff; }
           .btn-primary:hover { background: #06ad56; }
@@ -32,6 +33,7 @@ public class AdminPage {
           .btn-gray:hover { background: #ddd; }
           .btn-red { background: #ff5757; color: #fff; }
           .btn-red:hover { background: #e74c4c; }
+          .btn:disabled { opacity: 0.4; cursor: not-allowed; }
           .modal-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
           .modal-mask.show { display: flex; }
           .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 440px; max-height: 90vh; overflow-y: auto; }
@@ -70,15 +72,20 @@ public class AdminPage {
           .msg-item .del-btn:hover { background: #e74c4c; }
           .empty-tip { color: #999; text-align: center; padding: 30px; }
 
-          /* 图片预览遮罩 */
+          /* 图片预览 */
           #image-preview {
             position: fixed; inset: 0; background: rgba(0,0,0,0.92);
             display: none; align-items: center; justify-content: center;
-            z-index: 999; padding: 20px;
+            z-index: 999; padding: 20px; overflow: hidden;
           }
           #image-preview.show { display: flex; }
           .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
-          .preview-content img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; }
+          .preview-content img {
+            max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px;
+            cursor: grab; user-select: none; -webkit-user-drag: none;
+          }
+          .preview-content img.dragging { cursor: grabbing; }
+          .preview-content img.smooth { transition: transform 0.1s ease-out; }
           .preview-actions { display: flex; gap: 12px; }
           .preview-actions a, .preview-actions button {
             padding: 9px 24px; font-size: 14px; border-radius: 6px;
@@ -174,9 +181,10 @@ public class AdminPage {
         <!-- 图片预览 -->
         <div id="image-preview" onclick="onPreviewMaskClick(event)">
           <div class="preview-content">
-            <img id="preview-img" src="" alt="">
+            <img id="preview-img" src="" alt="" draggable="false" onwheel="onPreviewWheel(event)">
             <div class="preview-actions">
               <a id="preview-download" href="#" download>下载图片</a>
+              <button onclick="resetPreviewZoom()">重置缩放</button>
               <button onclick="closePreview()">关闭</button>
             </div>
           </div>
@@ -228,6 +236,12 @@ public class AdminPage {
 
             const tdUsername = document.createElement('td');
             tdUsername.textContent = u.username;
+            if (u.isDefaultAdmin) {
+              const tag = document.createElement('span');
+              tag.className = 'badge default-admin';
+              tag.textContent = '默认';
+              tdUsername.appendChild(tag);
+            }
 
             const tdNickname = document.createElement('td');
             tdNickname.textContent = u.nickname;
@@ -255,6 +269,10 @@ public class AdminPage {
             btnDel.className = 'btn btn-red';
             btnDel.textContent = '删除';
             btnDel.onclick = () => deleteUser(u);
+            if (u.isDefaultAdmin) {
+              btnDel.disabled = true;
+              btnDel.title = '默认管理员不可删除';
+            }
 
             tdActions.appendChild(btnEdit);
             tdActions.appendChild(btnMsg);
@@ -287,7 +305,15 @@ public class AdminPage {
           document.getElementById('edit-created').value = formatTime(u.createdAt);
           document.getElementById('edit-nickname').value = u.nickname;
           document.getElementById('edit-password').value = '';
-          document.getElementById('edit-isadmin').checked = u.isAdmin;
+          const isAdminCb = document.getElementById('edit-isadmin');
+          isAdminCb.checked = u.isAdmin;
+          if (u.isDefaultAdmin) {
+            isAdminCb.disabled = true;
+            isAdminCb.parentElement.title = '默认管理员权限不可取消';
+          } else {
+            isAdminCb.disabled = false;
+            isAdminCb.parentElement.title = '';
+          }
           renderEditAvatar();
           document.getElementById('edit-msg').className = 'msg';
           document.getElementById('edit-mask').classList.add('show');
@@ -317,7 +343,7 @@ public class AdminPage {
           if (!file) return;
           compressImage(file, 200, async (base64) => {
             try {
-              var res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=avatar', { method: 'POST', body: base64 });
+              const res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=avatar', { method: 'POST', body: base64 });
               if (!res.ok) { showMsg('edit-msg', '头像上传失败：' + res.status, 'error'); return; }
               editAvatarId = (await res.text()).trim();
               renderEditAvatar();
@@ -353,7 +379,7 @@ public class AdminPage {
 
         // ---------- 删除用户 ----------
         async function deleteUser(u) {
-          if (!confirm(`确定删除用户「${u.nickname}（${u.username}）」？\n该操作会踢出在线用户并删除其所有消息，不可恢复。`)) return;
+          if (!confirm(`确定删除用户「${u.nickname}（${u.username}）」？\\n该操作会踢出在线用户并删除其所有消息，不可恢复。`)) return;
           try {
             const res = await fetch('/api/admin/deleteUser?token=' + encodeURIComponent(TOKEN), {
               method: 'POST',
@@ -532,21 +558,124 @@ public class AdminPage {
           currentMsgUser = null;
         }
 
-        // ---------- 图片预览 ----------
+        // ==================== 图片预览 + 缩放 + 拖动 ====================
+        var previewScale = 1;
+        var previewMinScale = 0.2;
+        var previewMaxScale = 8;
+        var previewX = 0;
+        var previewY = 0;
+        var dragging = false;
+        var dragStartX = 0;
+        var dragStartY = 0;
+        var dragOffsetX = 0;
+        var dragOffsetY = 0;
+
+        function applyPreviewTransform(smooth) {
+          var img = document.getElementById('preview-img');
+          if (smooth) img.classList.add('smooth');
+          else img.classList.remove('smooth');
+          img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+        }
+
         function openPreview(id) {
-          document.getElementById('preview-img').src = '/image/' + id;
-          const dl = document.getElementById('preview-download');
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
+          var img = document.getElementById('preview-img');
+          img.src = '/image/' + id;
+          img.classList.remove('dragging');
+          applyPreviewTransform(false);
+          var dl = document.getElementById('preview-download');
           dl.href = '/image/' + id + '?download=1';
           dl.setAttribute('download', 'image_' + id + '.jpg');
           document.getElementById('image-preview').classList.add('show');
         }
+
         function closePreview() {
           document.getElementById('image-preview').classList.remove('show');
-          document.getElementById('preview-img').src = '';
+          var img = document.getElementById('preview-img');
+          img.src = '';
+          img.classList.remove('dragging');
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
         }
+
+        function resetPreviewZoom() {
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          applyPreviewTransform(true);
+        }
+
+        function clampPreviewPosition() {
+          var img = document.getElementById('preview-img');
+          if (!img.src) return;
+          var rect = img.getBoundingClientRect();
+          var vw = window.innerWidth;
+          var vh = window.innerHeight;
+          var margin = 80;
+          var dx = 0, dy = 0;
+          if (rect.right < margin) dx = margin - rect.right;
+          if (rect.left > vw - margin) dx = (vw - margin) - rect.left;
+          if (rect.bottom < margin) dy = margin - rect.bottom;
+          if (rect.top > vh - margin) dy = (vh - margin) - rect.top;
+          if (dx !== 0 || dy !== 0) {
+            previewX += dx;
+            previewY += dy;
+            img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+          }
+        }
+
+        function onPreviewWheel(e) {
+          e.preventDefault();
+          var delta = -e.deltaY * 0.002;
+          previewScale = previewScale * (1 + delta);
+          if (previewScale < previewMinScale) previewScale = previewMinScale;
+          if (previewScale > previewMaxScale) previewScale = previewMaxScale;
+          applyPreviewTransform(true);
+          setTimeout(clampPreviewPosition, 120);
+        }
+
+        function onPreviewMouseDown(e) {
+          if (e.button !== 0) return;
+          dragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragOffsetX = previewX;
+          dragOffsetY = previewY;
+          document.getElementById('preview-img').classList.add('dragging');
+          e.preventDefault();
+        }
+
+        function onPreviewMouseMove(e) {
+          if (!dragging) return;
+          previewX = dragOffsetX + (e.clientX - dragStartX);
+          previewY = dragOffsetY + (e.clientY - dragStartY);
+          applyPreviewTransform(false);
+        }
+
+        function onPreviewMouseUp(e) {
+          if (!dragging) return;
+          dragging = false;
+          document.getElementById('preview-img').classList.remove('dragging');
+          clampPreviewPosition();
+        }
+
         function onPreviewMaskClick(e) {
           if (e.target.id === 'image-preview') closePreview();
         }
+
+        (function() {
+          var img = document.getElementById('preview-img');
+          img.addEventListener('dblclick', resetPreviewZoom);
+          img.addEventListener('mousedown', onPreviewMouseDown);
+          document.addEventListener('mousemove', onPreviewMouseMove);
+          document.addEventListener('mouseup', onPreviewMouseUp);
+        })();
+
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') { closePreview(); closeMsg(); closeEdit(); }
         });

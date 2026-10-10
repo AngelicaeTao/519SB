@@ -4,8 +4,10 @@ import ConfigurationLayer.Config;
 import DataLayer.User;
 import DataLayer.UserStore;
 import InfrastructureLayer.HttpUtil;
+import InfrastructureLayer.IpRateLimiter;
 import InfrastructureLayer.RateLimiter;
 import InfrastructureLayer.SessionManager;
+import InfrastructureLayer.SseManager;
 import ViewLayer.GatePage;
 import ViewLayer.LoginPage;
 import com.sun.net.httpserver.HttpExchange;
@@ -19,19 +21,21 @@ public class AuthHandler {
 
     private final UserStore userStore;
     private final SessionManager sessions;
+    private final SseManager sse;
+    private final IpRateLimiter limiter;
     private final RateLimiter loginLimiter = new RateLimiter();
 
-    public AuthHandler(UserStore userStore, SessionManager sessions) {
+    public AuthHandler(UserStore userStore, SessionManager sessions, SseManager sse, IpRateLimiter limiter) {
         this.userStore = userStore;
         this.sessions = sessions;
+        this.sse = sse;
+        this.limiter = limiter;
     }
 
-    /** 访问根路径：过门禁后跳转到论坛首页 */
     public void handleRoot(HttpExchange ex) throws IOException {
         if (!checkGate(ex)) {
             HttpUtil.sendHtml(ex, 200, GatePage.HTML);
         } else {
-            // 通过门禁 → 重定向到论坛首页
             ex.getResponseHeaders().set("Location", "/posts");
             ex.sendResponseHeaders(302, -1);
             ex.close();
@@ -66,7 +70,7 @@ public class AuthHandler {
         return "1".equals(HttpUtil.getCookie(ex, GATE_COOKIE));
     }
 
-    /** 注册：需要门禁通过 */
+    /** 注册：加频率限制 */
     public void handleRegister(HttpExchange ex) throws IOException {
         if (!checkGate(ex)) {
             HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"未通过验证\"}");
@@ -76,6 +80,13 @@ public class AuthHandler {
             HttpUtil.sendJson(ex, 405, "{\"ok\":false,\"msg\":\"method not allowed\"}");
             return;
         }
+
+        String ip = BootstrapLayer.ChatServer.getClientIp(ex);
+        if (!limiter.allowRegister(ip)) {
+            HttpUtil.sendJson(ex, 429, "{\"ok\":false,\"msg\":\"注册过于频繁，请稍后再试\"}");
+            return;
+        }
+
         String body = HttpUtil.readBody(ex);
         String username = HttpUtil.extractJsonString(body, "username");
         String password = HttpUtil.extractJsonString(body, "password");
@@ -90,7 +101,7 @@ public class AuthHandler {
             return;
         }
         if (username.length() > 20 || nickname.length() > 20) {
-            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"用户名或昵称过长（最多 20 字）\"}");
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"用户名或昵称过长\"}");
             return;
         }
 
@@ -107,7 +118,7 @@ public class AuthHandler {
         }
     }
 
-    /** 登录：需要门禁通过 */
+    /** 登录：管理员走专用锁定机制，防爆破 */
     public void handleLogin(HttpExchange ex) throws IOException {
         if (!checkGate(ex)) {
             HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"未通过验证\"}");
@@ -117,6 +128,8 @@ public class AuthHandler {
             HttpUtil.sendJson(ex, 405, "{\"ok\":false,\"msg\":\"method not allowed\"}");
             return;
         }
+
+        String ip = BootstrapLayer.ChatServer.getClientIp(ex);
         String body = HttpUtil.readBody(ex);
         String username = HttpUtil.extractJsonString(body, "username");
         String password = HttpUtil.extractJsonString(body, "password");
@@ -126,6 +139,15 @@ public class AuthHandler {
             return;
         }
 
+        boolean isAdminLogin = Config.ADMIN_USERNAME.equals(username);
+
+        // 管理员登录：先检查是否被锁
+        if (isAdminLogin && limiter.isAdminLoginLocked(ip)) {
+            HttpUtil.sendJson(ex, 429, "{\"ok\":false,\"msg\":\"管理员登录已锁定，请稍后再试\"}");
+            return;
+        }
+
+        // 普通登录：频率限制
         String limitKey = "login:" + username;
         if (!loginLimiter.allow(limitKey, Config.LOGIN_MAX_ATTEMPTS, Config.LOGIN_WINDOW_MS)) {
             HttpUtil.sendJson(ex, 429, "{\"ok\":false,\"msg\":\"登录尝试过于频繁，请稍后再试\"}");
@@ -133,7 +155,17 @@ public class AuthHandler {
         }
 
         if (userStore.verify(username, password)) {
+            // 成功
+            if (isAdminLogin) {
+                limiter.recordAdminLoginSuccess(ip);
+            }
+
             User u = userStore.getUser(username);
+
+            // 单设备登录：踢掉该用户的所有旧会话和 SSE 连接
+            sessions.removeAllSessionsOfUser(username);
+            sse.kickUser(username, "你的账号已在其他设备登录，若非本人操作请立即修改密码");
+
             String token = sessions.createSession(username);
             String resp = "{\"ok\":true,\"token\":\"" + token + "\""
                     + ",\"username\":\"" + HttpUtil.escapeJson(u.username) + "\""
@@ -142,6 +174,10 @@ public class AuthHandler {
                     + ",\"isAdmin\":" + u.isAdmin + "}";
             HttpUtil.sendJson(ex, 200, resp);
         } else {
+            // 失败
+            if (isAdminLogin) {
+                limiter.recordAdminLoginFailure(ip);
+            }
             HttpUtil.sendJson(ex, 401, "{\"ok\":false,\"msg\":\"用户名或密码错误\"}");
         }
     }
@@ -152,7 +188,6 @@ public class AuthHandler {
         HttpUtil.sendJson(ex, 200, "{\"ok\":true}");
     }
 
-    /** 密码强度校验 */
     private String checkPasswordStrength(String pwd) {
         if (pwd.length() < 6) return "密码至少 6 位";
         if (pwd.length() > 50) return "密码最多 50 位";

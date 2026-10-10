@@ -1,5 +1,6 @@
 package HandlerLayer;
 
+import ConfigurationLayer.Config;
 import DataLayer.MessageStore;
 import DataLayer.User;
 import DataLayer.UserStore;
@@ -28,7 +29,23 @@ public class AdminHandler {
         this.sse = sse;
     }
 
+    /** GET /admin  页面鉴权：非管理员 302 到登录页 */
     public void handlePage(HttpExchange ex) throws IOException {
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String username = sessions.getUser(token);
+        if (username == null) {
+            ex.getResponseHeaders().set("Location", "/login");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+            return;
+        }
+        User u = userStore.getUser(username);
+        if (u == null || !u.isAdmin) {
+            ex.getResponseHeaders().set("Location", "/chat");
+            ex.sendResponseHeaders(302, -1);
+            ex.close();
+            return;
+        }
         HttpUtil.sendHtml(ex, 200, AdminPage.HTML);
     }
 
@@ -49,6 +66,7 @@ public class AdminHandler {
                     .append(",\"nickname\":\"").append(HttpUtil.escapeJson(u.nickname)).append("\"")
                     .append(",\"avatarId\":").append(u.avatarId == null ? "null" : "\"" + HttpUtil.escapeJson(u.avatarId) + "\"")
                     .append(",\"isAdmin\":").append(u.isAdmin)
+                    .append(",\"isDefaultAdmin\":").append(u.username.equals(Config.ADMIN_USERNAME))
                     .append(",\"createdAt\":").append(u.createdAt)
                     .append("}");
         }
@@ -77,6 +95,11 @@ public class AdminHandler {
         }
 
         boolean isAdmin = body.contains("\"isAdmin\":true");
+
+        // 默认管理员不能被取消管理员权限
+        if (target != null && target.equals(Config.ADMIN_USERNAME)) {
+            isAdmin = true;
+        }
 
         if (target == null || nickname == null || nickname.isBlank()) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"参数错误\"}");
@@ -112,6 +135,10 @@ public class AdminHandler {
         }
         if (target.equals(operator)) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"不能删除自己\"}");
+            return;
+        }
+        if (target.equals(Config.ADMIN_USERNAME)) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"不能删除默认管理员\"}");
             return;
         }
         if (!userStore.exists(target)) {
@@ -199,6 +226,25 @@ public class AdminHandler {
         HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"msg\":\"已删除 " + n + " 条消息\"}");
     }
 
+    /** POST /api/admin/clearMessages?token=xxx  清空所有消息（保留用户和头像） */
+    public void handleClearMessages(HttpExchange ex) throws IOException {
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String operator = sessions.getUser(token);
+        if (operator == null || !isAdmin(operator)) {
+            HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"无权访问\"}");
+            return;
+        }
+        try (java.sql.Connection conn = InfrastructureLayer.DatabaseManager.getConnection();
+             java.sql.Statement st = conn.createStatement()) {
+            int msgCount = st.executeUpdate("DELETE FROM messages");
+            int imgCount = st.executeUpdate("DELETE FROM images WHERE type = 'message'");
+            HttpUtil.sendJson(ex, 200,
+                    "{\"ok\":true,\"msg\":\"已清空 " + msgCount + " 条消息、" + imgCount + " 张聊天图片\"}");
+        } catch (java.sql.SQLException e) {
+            HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"清空失败：" + HttpUtil.escapeJson(e.getMessage()) + "\"}");
+        }
+    }
+
     /** 从 JSON 里提取数字字段 */
     private Long extractLong(String json, String key) {
         java.util.regex.Pattern p = java.util.regex.Pattern.compile(
@@ -229,24 +275,5 @@ public class AdminHandler {
     private boolean isAdmin(String username) {
         User u = userStore.getUser(username);
         return u != null && u.isAdmin;
-    }
-
-    /** POST /api/admin/clearMessages?token=xxx  清空所有消息（保留用户和头像） */
-    public void handleClearMessages(HttpExchange ex) throws IOException {
-        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
-        String operator = sessions.getUser(token);
-        if (operator == null || !isAdmin(operator)) {
-            HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"无权访问\"}");
-            return;
-        }
-        try (java.sql.Connection conn = InfrastructureLayer.DatabaseManager.getConnection();
-             java.sql.Statement st = conn.createStatement()) {
-            int msgCount = st.executeUpdate("DELETE FROM messages");
-            int imgCount = st.executeUpdate("DELETE FROM images WHERE type = 'message'");
-            HttpUtil.sendJson(ex, 200,
-                    "{\"ok\":true,\"msg\":\"已清空 " + msgCount + " 条消息、" + imgCount + " 张聊天图片\"}");
-        } catch (java.sql.SQLException e) {
-            HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"清空失败：" + HttpUtil.escapeJson(e.getMessage()) + "\"}");
-        }
     }
 }

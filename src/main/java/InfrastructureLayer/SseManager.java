@@ -16,8 +16,6 @@ import java.util.concurrent.Executors;
 public class SseManager {
 
     private final Map<OutputStream, String> clients = new ConcurrentHashMap<>();
-
-    /** 广播专用虚拟线程池，避免慢客户端拖累其他 */
     private final ExecutorService broadcaster = Executors.newVirtualThreadPerTaskExecutor();
 
     public void register(OutputStream os, String username) {
@@ -28,7 +26,16 @@ public class SseManager {
         clients.remove(os);
     }
 
-    /** 异步广播：每个客户端一个虚拟线程去写 */
+    /** 统计某个用户当前的 SSE 连接数 */
+    public int countConnectionsFor(String username) {
+        if (username == null) return 0;
+        int count = 0;
+        for (String u : clients.values()) {
+            if (username.equals(u)) count++;
+        }
+        return count;
+    }
+
     public void broadcast(String data) {
         if (data == null) return;
         byte[] payload = ("data: " + data + "\n\n").getBytes(StandardCharsets.UTF_8);
@@ -48,16 +55,22 @@ public class SseManager {
         }
     }
 
-    /** 给单个连接发送一条消息（用于历史回放，同步） */
     public void sendTo(OutputStream os, String data) throws IOException {
         synchronized (os) {
             os.write(("data: " + data + "\n\n").getBytes(StandardCharsets.UTF_8));
         }
     }
 
-    /** 主动踢出某个用户的所有连接 */
     public void kickUser(String username) {
-        String kickJson = "{\"type\":\"kick\",\"reason\":\"账号已被管理员删除\"}";
+        kickUser(username, "你的账号已在其他设备登录");
+    }
+
+    public void kickUser(String username, String reason) {
+        if (username == null) return;
+        if (reason == null) reason = "你已被踢下线";
+
+        String escaped = reason.replace("\\", "\\\\").replace("\"", "\\\"");
+        String kickJson = "{\"type\":\"kick\",\"reason\":\"" + escaped + "\"}";
         byte[] payload = ("data: " + kickJson + "\n\n").getBytes(StandardCharsets.UTF_8);
 
         List<OutputStream> toClose = new ArrayList<>();
@@ -78,7 +91,6 @@ public class SseManager {
         }
     }
 
-    /** 返回当前在线的用户名列表（去重） */
     public Set<String> listOnlineUsers() {
         return new HashSet<>(clients.values());
     }

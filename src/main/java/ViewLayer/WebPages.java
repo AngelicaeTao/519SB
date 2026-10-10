@@ -18,19 +18,53 @@ public class WebPages {
           #header .right { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #666; }
           #header .right a, #header .right button { font-size: 12px; padding: 5px 10px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; color: #666; text-decoration: none; }
           #header .right a:hover, #header .right button:hover { background: #f5f5f5; }
+          #header .right button.online-btn { border-color: #07c160; color: #07c160; }
+          #header .right button.online-btn.active { background: #07c160; color: #fff; }
           .my-avatar { width: 28px; height: 28px; border-radius: 50%; background: #07c160; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; overflow: hidden; cursor: pointer; text-decoration: none; }
           .my-avatar img { width: 100%; height: 100%; object-fit: cover; }
-          #main { flex: 1; display: flex; overflow: hidden; }
+
+          #main { flex: 1; overflow: hidden; position: relative; display: flex; }
           #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; position: relative; }
           #loading-tip { text-align: center; color: #999; font-size: 12px; padding: 8px; display: none; }
           #loading-tip.show { display: block; }
-          #sidebar { width: 180px; background: #fafafa; border-left: 1px solid #e5e5e5; overflow-y: auto; padding: 12px 10px; font-size: 13px; }
-          #sidebar h3 { font-size: 12px; color: #999; font-weight: normal; margin-bottom: 10px; }
+
+          /* 在线用户抽屉：默认隐藏，点击按钮滑入 */
+          #sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 220px;
+            background: #fff;
+            border-left: 1px solid #e5e5e5;
+            overflow-y: auto;
+            padding: 12px 10px;
+            font-size: 13px;
+            box-shadow: -2px 0 8px rgba(0,0,0,0.08);
+            transform: translateX(100%);
+            transition: transform 0.25s ease;
+            z-index: 20;
+          }
+          #sidebar.show { transform: translateX(0); }
+          #sidebar h3 { font-size: 12px; color: #999; font-weight: normal; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+          #sidebar h3 .close-btn { font-size: 16px; color: #999; cursor: pointer; background: none; border: none; padding: 0 4px; line-height: 1; }
+          #sidebar h3 .close-btn:hover { color: #333; }
           .online-user { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; color: #333; }
           .online-user .dot { width: 8px; height: 8px; border-radius: 50%; background: #07c160; flex-shrink: 0; }
           .online-user .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
           .online-user .avatar { width: 24px; height: 24px; border-radius: 50%; background: #bbb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; flex-shrink: 0; }
           .online-user .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+          /* 遮罩：抽屉展开时点击可以关闭 */
+          #sidebar-mask {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.15);
+            display: none;
+            z-index: 15;
+          }
+          #sidebar-mask.show { display: block; }
+
           .msg { max-width: 78%; margin-bottom: 15px; display: flex; gap: 8px; position: relative; }
           .msg.self { align-self: flex-end; flex-direction: row-reverse; }
           .msg.other { align-self: flex-start; }
@@ -71,12 +105,12 @@ public class WebPages {
           .preview-actions a, .preview-actions button { padding: 9px 24px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; text-decoration: none; font-family: inherit; line-height: 1.2; }
           .preview-actions a { background: #07c160; color: #fff; }
           .preview-actions button { background: #fff; color: #333; }
-          @media (max-width: 600px) { #sidebar { display: none; } }
         </style></head><body>
         <div id="header">
           <span class="title">__SITE_TITLE__</span>
           <div class="right">
             <a href="/posts" style="font-size:12px;padding:5px 10px;border:1px solid #07c160;background:#fff;color:#07c160;border-radius:6px;text-decoration:none;">帖子</a>
+            <button id="online-btn" class="online-btn">在线 <span id="online-count">0</span></button>
             <a id="admin-link" href="/admin" style="display:none;">管理</a>
             <a href="/profile" title="个人中心"><span class="my-avatar" id="my-avatar"></span></a>
             <span id="my-nickname"></span>
@@ -87,8 +121,12 @@ public class WebPages {
           <div id="chat-box">
             <div id="loading-tip">加载中...</div>
           </div>
+          <div id="sidebar-mask" onclick="toggleSidebar(false)"></div>
           <div id="sidebar">
-            <h3>在线用户 <span id="online-count">0</span></h3>
+            <h3>
+              <span>在线用户</span>
+              <button class="close-btn" onclick="toggleSidebar(false)" title="关闭">×</button>
+            </h3>
             <div id="online-list"></div>
           </div>
         </div>
@@ -131,6 +169,9 @@ public class WebPages {
         var imageInput = document.getElementById('image-input');
         var loadingTip = document.getElementById('loading-tip');
         var mentionDropdown = document.getElementById('mention-dropdown');
+        var sidebar = document.getElementById('sidebar');
+        var sidebarMask = document.getElementById('sidebar-mask');
+        var onlineBtn = document.getElementById('online-btn');
 
         var sending = false;
         var unreadCount = 0;
@@ -139,6 +180,7 @@ public class WebPages {
         var noMoreHistory = false;
         var loadingHistory = false;
         var onlineUsers = [];
+        var historyLoaded = false;
 
         function formatTimeNow() {
           var d = new Date();
@@ -167,15 +209,47 @@ public class WebPages {
             gain.connect(ctx.destination);
             osc.frequency.value = 880;
             osc.type = 'sine';
-            gain.gain.setValueAtTime(0.15, ctx.currentTime);
+            gain.gain.setValueAtTime(0.6, ctx.currentTime);
             gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
             osc.start();
             osc.stop(ctx.currentTime + 0.3);
+
+            var osc2 = ctx.createOscillator();
+            var gain2 = ctx.createGain();
+            osc2.connect(gain2);
+            gain2.connect(ctx.destination);
+            osc2.frequency.value = 1320;
+            osc2.type = 'sine';
+            gain2.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+            osc2.start();
+            osc2.stop(ctx.currentTime + 0.3);
           } catch (e) {}
         }
 
+        // ==================== 侧边栏切换 ====================
+        function toggleSidebar(show) {
+          if (typeof show === 'undefined') {
+            show = !sidebar.classList.contains('show');
+          }
+          if (show) {
+            sidebar.classList.add('show');
+            sidebarMask.classList.add('show');
+            onlineBtn.classList.add('active');
+          } else {
+            sidebar.classList.remove('show');
+            sidebarMask.classList.remove('show');
+            onlineBtn.classList.remove('active');
+          }
+        }
+        onlineBtn.onclick = function () { toggleSidebar(); };
+
         document.getElementById('my-nickname').textContent = MY_NICKNAME;
-        if (IS_ADMIN) document.getElementById('admin-link').style.display = 'inline-block';
+        if (IS_ADMIN) {
+          var adminLink = document.getElementById('admin-link');
+          adminLink.style.display = 'inline-block';
+          adminLink.href = '/admin?token=' + encodeURIComponent(TOKEN);
+        }
         renderMyAvatar();
 
         function renderMyAvatar() {
@@ -232,6 +306,7 @@ public class WebPages {
             return;
           }
           if (data.type === 'history_end') {
+            historyLoaded = true;
             updateOldestId();
             maybeLoadMore();
             return;
@@ -244,7 +319,7 @@ public class WebPages {
             unreadCount++;
             updateTitle();
           }
-          if (!isSelf && isMentionedBy(data.text)) {
+          if (historyLoaded && !isSelf && isMentionedBy(data.text)) {
             playDing();
           }
         };
@@ -388,6 +463,15 @@ public class WebPages {
           document.getElementById('online-count').textContent = users.length;
           var list = document.getElementById('online-list');
           list.innerHTML = '';
+          if (users.length === 0) {
+            var empty = document.createElement('div');
+            empty.style.color = '#999';
+            empty.style.fontSize = '12px';
+            empty.style.padding = '10px 4px';
+            empty.textContent = '暂无在线用户';
+            list.appendChild(empty);
+            return;
+          }
           for (var i = 0; i < users.length; i++) {
             var u = users[i];
             var div = document.createElement('div');
@@ -713,7 +797,7 @@ public class WebPages {
         });
 
         document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape') { closePreview(); hideMentionDropdown(); }
+          if (e.key === 'Escape') { closePreview(); hideMentionDropdown(); toggleSidebar(false); }
         });
 
         sendBtn.onclick = sendText;
