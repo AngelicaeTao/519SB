@@ -39,6 +39,7 @@ public class ProfileHandler {
         String nickname = HttpUtil.extractJsonString(body, "nickname");
         String avatarId = HttpUtil.extractJsonString(body, "avatarId");
         if (body.contains("\"avatarId\":null")) avatarId = null;
+        if (avatarId != null && avatarId.isEmpty()) avatarId = null;
 
         if (nickname == null || nickname.isBlank()) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"昵称不能为空\"}");
@@ -48,7 +49,6 @@ public class ProfileHandler {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"昵称过长\"}");
             return;
         }
-        // 校验 avatarId 格式，防止 XSS
         if (avatarId != null && !AVATAR_ID_PATTERN.matcher(avatarId).matches()) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"头像 ID 格式错误\"}");
             return;
@@ -86,12 +86,13 @@ public class ProfileHandler {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"新密码不能为空\"}");
             return;
         }
-        if (newPassword.length() < 6 || newPassword.length() > 50) {
-            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"新密码长度应为 6~50 位\"}");
+
+        String pwdErr = checkPasswordStrength(newPassword);
+        if (pwdErr != null) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"" + pwdErr + "\"}");
             return;
         }
 
-        // 校验旧密码
         if (!userStore.verify(username, oldPassword)) {
             HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"旧密码错误\"}");
             return;
@@ -102,5 +103,18 @@ public class ProfileHandler {
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"修改失败\"}");
         }
+    }
+
+    /** 密码强度校验 */
+    private String checkPasswordStrength(String pwd) {
+        if (pwd.length() < 6) return "密码至少 6 位";
+        if (pwd.length() > 50) return "密码最多 50 位";
+        boolean hasLetter = false, hasDigit = false;
+        for (char c : pwd.toCharArray()) {
+            if (Character.isLetter(c)) hasLetter = true;
+            else if (Character.isDigit(c)) hasDigit = true;
+        }
+        if (!hasLetter || !hasDigit) return "密码必须同时包含字母和数字";
+        return null;
     }
 }

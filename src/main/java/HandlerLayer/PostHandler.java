@@ -9,7 +9,7 @@ import InfrastructureLayer.SessionManager;
 import ViewLayer.PostPage;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
-import DataLayer.User;
+
 import java.io.IOException;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -68,8 +68,6 @@ public class PostHandler implements HttpHandler {
     private void handleApi(HttpExchange ex, String path) throws IOException {
         String method = ex.getRequestMethod();
 
-        // GET /api/posts          列表
-        // GET /api/posts?id=123   详情
         if (path.equals("/api/posts") && "GET".equalsIgnoreCase(method)) {
             String idStr = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "id");
             if (idStr == null) {
@@ -80,43 +78,36 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        // POST /api/posts?token=  创建
         if (path.equals("/api/posts") && "POST".equalsIgnoreCase(method)) {
             handleCreate(ex);
             return;
         }
 
-        // POST /api/posts/update?token=
         if (path.equals("/api/posts/update") && "POST".equalsIgnoreCase(method)) {
             handleUpdate(ex);
             return;
         }
 
-        // POST /api/posts/delete?token=
         if (path.equals("/api/posts/delete") && "POST".equalsIgnoreCase(method)) {
             handleDelete(ex);
             return;
         }
 
-        // POST /api/posts/like?token=
         if (path.equals("/api/posts/like") && "POST".equalsIgnoreCase(method)) {
             handleToggleLike(ex);
             return;
         }
 
-// POST /api/posts/comment?token=
         if (path.equals("/api/posts/comment") && "POST".equalsIgnoreCase(method)) {
             handleAddComment(ex);
             return;
         }
 
-// GET /api/posts/comments?postId=
         if (path.equals("/api/posts/comments") && "GET".equalsIgnoreCase(method)) {
             handleListComments(ex);
             return;
         }
 
-// POST /api/posts/deleteComment?token=
         if (path.equals("/api/posts/deleteComment") && "POST".equalsIgnoreCase(method)) {
             handleDeleteComment(ex);
             return;
@@ -263,7 +254,6 @@ public class PostHandler implements HttpHandler {
 
     // ---------------- 工具 ----------------
 
-    /** 作者本人或管理员可以管理 */
     private boolean canManage(String operator, String author) {
         if (operator.equals(author)) return true;
         User u = userStore.getUser(operator);
@@ -314,7 +304,7 @@ public class PostHandler implements HttpHandler {
         HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"liked\":" + liked + ",\"likeCount\":" + count + "}");
     }
 
-// ---------------- 评论 ----------------
+    // ---------------- 评论 ----------------
 
     private void handleAddComment(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
@@ -326,7 +316,7 @@ public class PostHandler implements HttpHandler {
 
         String body = HttpUtil.readBody(ex);
         Long postId = extractLong(body, "postId");
-        Long parentId = extractLong(body, "parentId");   // ★ 新增：可为 null
+        Long parentId = extractLong(body, "parentId");
         String content = HttpUtil.extractJsonString(body, "content");
 
         if (postId == null || content == null || content.isBlank()) {
@@ -341,7 +331,6 @@ public class PostHandler implements HttpHandler {
             HttpUtil.sendJson(ex, 404, "{\"ok\":false,\"msg\":\"帖子不存在\"}");
             return;
         }
-        // ★ 如果指定了 parentId，校验它存在
         if (parentId != null && postStore.getCommentAuthor(parentId) == null) {
             HttpUtil.sendJson(ex, 404, "{\"ok\":false,\"msg\":\"被回复的评论不存在\"}");
             return;
