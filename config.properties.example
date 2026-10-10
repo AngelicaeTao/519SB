@@ -7,7 +7,7 @@
 port=8443
 
 # 网站标题（会显示在聊天页面顶部）
-site.title=宿舍聊天室
+site.title=519SB-Chat
 
 # keystore 文件路径
 keystore.path=keystore.p12
@@ -32,3 +32,14 @@ image.quality=0.6
 
 # HTTP 线程池大小（同时处理请求的数量）
 thread.pool.size=16
+
+# 门禁验证码（首次访问需要输入的）
+access.code=519666233
+
+# 登录失败限制：在 login.window.ms 毫秒内，同一账号最多尝试 login.max.attempts 次
+login.max.attempts=5
+login.window.ms=60000
+
+# 消息发送限制：在 send.window.ms 毫秒内，同一用户最多发送 send.max.count 条
+send.max.count=5
+send.window.ms=3000

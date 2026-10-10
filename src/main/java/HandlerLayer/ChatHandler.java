@@ -1,9 +1,11 @@
 package HandlerLayer;
 
+import ConfigurationLayer.Config;
 import DataLayer.MessageStore;
 import DataLayer.User;
 import DataLayer.UserStore;
 import InfrastructureLayer.HttpUtil;
+import InfrastructureLayer.RateLimiter;
 import InfrastructureLayer.SessionManager;
 import InfrastructureLayer.SseManager;
 import ViewLayer.WebPages;
@@ -13,15 +15,17 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 
-/** 处理聊天相关的三个路径：/chat（页面）、/send（发消息）、/events（SSE 订阅） */
+/** 聊天相关：/chat、/send、/events */
 public class ChatHandler {
 
     private final MessageStore store;
     private final SseManager sse;
     private final SessionManager sessions;
     private final UserStore userStore;
+    private final RateLimiter sendLimiter = new RateLimiter();
 
-    public ChatHandler(MessageStore store, SseManager sse, SessionManager sessions, UserStore userStore) {
+    public ChatHandler(MessageStore store, SseManager sse,
+                       SessionManager sessions, UserStore userStore) {
         this.store = store;
         this.sse = sse;
         this.sessions = sessions;
@@ -57,6 +61,14 @@ public class ChatHandler {
             return;
         }
 
+        // 发送频率限制（按用户）
+        String limitKey = "send:" + username;
+        if (!sendLimiter.allow(limitKey, Config.SEND_MAX_COUNT, Config.SEND_WINDOW_MS)) {
+            HttpUtil.sendJson(ex, 429,
+                    "{\"ok\":false,\"msg\":\"发送过于频繁，请稍后再试\"}");
+            return;
+        }
+
         String body = HttpUtil.readBody(ex);
         String text = HttpUtil.extractJsonString(body, "text");
         String time = HttpUtil.extractJsonString(body, "time");
@@ -65,10 +77,14 @@ public class ChatHandler {
         if (time == null) time = "";
         if (type == null) type = "text";
 
-        // 存数据库
+        // 限制内容长度
+        if (text.length() > 2000) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"消息过长（最多 2000 字）\"}");
+            return;
+        }
+
         store.add(username, text, time, type);
 
-        // 广播（带最新昵称和头像）
         String msg = "{\"username\":\"" + HttpUtil.escapeJson(user.username)
                 + "\",\"nickname\":\"" + HttpUtil.escapeJson(user.nickname)
                 + "\",\"avatarId\":" + (user.avatarId == null ? "null" : "\"" + HttpUtil.escapeJson(user.avatarId) + "\"")
@@ -83,7 +99,8 @@ public class ChatHandler {
 
     public void handleEvents(HttpExchange ex) throws IOException {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
-        if (sessions.getUser(token) == null) {
+        String username = sessions.getUser(token);
+        if (username == null) {
             HttpUtil.sendText(ex, 401, "unauthorized");
             return;
         }
@@ -94,7 +111,6 @@ public class ChatHandler {
         ex.sendResponseHeaders(200, 0);
 
         OutputStream os = ex.getResponseBody();
-        String username = sessions.getUser(token);
         sse.register(os, username);
 
         try {
