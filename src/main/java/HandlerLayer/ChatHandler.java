@@ -88,7 +88,6 @@ public class ChatHandler {
 
         long id = store.add(username, text, time, type);
         long now = System.currentTimeMillis();
-
         String msg = "{\"id\":" + id
                 + ",\"createdAt\":" + now
                 + ",\"username\":\"" + HttpUtil.escapeJson(user.username)

@@ -88,13 +88,8 @@ public class AdminHandler {
         String target = HttpUtil.extractJsonString(body, "username");
         String nickname = HttpUtil.extractJsonString(body, "nickname");
         String newPassword = HttpUtil.extractJsonString(body, "newPassword");
-        String avatarId = HttpUtil.extractJsonString(body, "avatarId");
-        if (body.contains("\"avatarId\":null")) avatarId = null;
-        // 校验 avatarId 格式，防止 XSS
-        if (avatarId != null && !avatarId.matches("^[a-f0-9]{32}$")) {
-            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"头像 ID 格式错误\"}");
-            return;
-        }
+        // 头像不在管理员可改范围内：只能由用户本人在个人中心更换。
+        // 请求体里即使带了 avatarId 也一律忽略。
 
         boolean isAdmin = body.contains("\"isAdmin\":true");
 
@@ -112,7 +107,7 @@ public class AdminHandler {
             return;
         }
 
-        if (userStore.adminUpdate(target, nickname, newPassword, avatarId, isAdmin)) {
+        if (userStore.adminUpdate(target, nickname, newPassword, isAdmin)) {
             HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"msg\":\"修改成功\"}");
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"修改失败\"}");

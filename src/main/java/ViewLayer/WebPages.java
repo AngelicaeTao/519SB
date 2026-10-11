@@ -5,7 +5,7 @@ import ConfigurationLayer.Config;
 /** 存放前端 HTML 模板 */
 public class WebPages {
 
-    public static final String INDEX_HTML = """
+    private static final String INDEX_HTML_PART1 = """
         <!doctype html>
         <html lang="zh-CN"><head><meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -73,13 +73,21 @@ public class WebPages {
           .recall-btn:hover { color: #c33; }
           .mention-badge { background: #ffb300; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 8px; }
           #input-area { background: #fff; padding: 10px; display: flex; box-shadow: 0 -1px 3px rgba(0,0,0,0.1); align-items: flex-end; gap: 8px; position: relative; }
-          #input { flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 10px; font-size: 15px; resize: none; min-height: 42px; max-height: 120px; font-family: inherit; line-height: 1.4; outline: none; }
+          /* 不设 max-height：上限交给 JS，这样拖拽调整才不会被 CSS 截断。
+             默认高度由 autoResizeInput() 按内容自动设置 */
+          #input { flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 10px; font-size: 15px; resize: none; min-height: 42px; font-family: inherit; line-height: 1.4; outline: none; }
+          /* 拖拽条：只在上边缘一条窄带，靠 cursor 与 hover 提示可拖 */
+          #input-resize {
+            position: absolute; top: 0; left: 0; right: 0; height: 7px;
+            cursor: ns-resize; z-index: 5;
+          }
+          #input-resize:hover, #input-resize.dragging { background: rgba(7,193,96,0.12); }
           #input:focus { border-color: #07c160; }
           #img-btn { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 12px; font-size: 15px; cursor: pointer; color: #333; }
           #send-btn { background: #07c160; color: #fff; border: none; border-radius: 6px; padding: 10px 20px; font-size: 15px; cursor: pointer; }
           #send-btn:disabled, #img-btn:disabled { opacity: 0.5; cursor: not-allowed; }
           .bubble img { max-width: 100%; max-height: 40vh; width: auto; height: auto; border-radius: 4px; display: block; cursor: zoom-in; object-fit: contain; }
-          #mention-dropdown { position: absolute; bottom: 60px; left: 10px; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 240px; overflow-y: auto; min-width: 200px; display: none; z-index: 50; }
+          #mention-dropdown { position: absolute; bottom: 100%; left: 10px; margin-bottom: 4px; background: #fff; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); max-height: 240px; overflow-y: auto; min-width: 200px; display: none; z-index: 50; }
           #mention-dropdown.show { display: block; }
           .mention-item { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-size: 14px; }
           .mention-item:hover, .mention-item.active { background: #f0f9f4; }
@@ -317,7 +325,24 @@ public class WebPages {
             border-radius: 6px; font-family: inherit;
           }
           .calendar-header button:hover { background: #f0f0f0; }
-          .calendar-header #cal-title { font-size: 15px; font-weight: 500; color: #333; }
+          .calendar-header #cal-title {
+            font-size: 15px; font-weight: 500; color: #333;
+            background: none; border: none; cursor: pointer;
+            padding: 4px 10px; border-radius: 6px; font-family: inherit;
+          }
+          .calendar-header #cal-title:hover { background: #f0f0f0; }
+          .calendar-header #cal-title::after { content: ' ▾'; font-size: 11px; color: #999; }
+          .calendar-years {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+          }
+          .cal-year-cell {
+            padding: 12px 0; text-align: center; font-size: 14px;
+            border: 1px solid #e5e5e5; border-radius: 8px;
+            background: #fff; cursor: pointer; font-family: inherit;
+            color: #333;
+          }
+          .cal-year-cell:hover { border-color: #07c160; color: #07c160; }
+          .cal-year-cell.current { background: #07c160; color: #fff; border-color: #07c160; }
           .calendar-weekdays {
             display: grid; grid-template-columns: repeat(7, 1fr);
             text-align: center; font-size: 12px; color: #999;
@@ -361,7 +386,7 @@ public class WebPages {
           #image-preview { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; overflow: hidden; }
           #image-preview.show { display: flex; }
           .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
-          .preview-content img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; cursor: grab; user-select: none; -webkit-user-drag: none; }
+          .preview-content img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; cursor: grab; user-select: none; -webkit-user-drag: none; will-change: transform; transform: translateZ(0); backface-visibility: hidden; }
           .preview-content img.dragging { cursor: grabbing; transition: none; }
           .preview-content img.smooth { transition: transform 0.1s ease-out; }
           .preview-actions { display: flex; gap: 12px; }
@@ -445,6 +470,7 @@ public class WebPages {
           </div>
         </div>
         <div id="input-area">
+          <div id="input-resize" title="上下拖动调整输入框高度（双击恢复自动高度）"></div>
           <textarea id="input" placeholder="输入消息...（Shift + Enter 换行，Enter 发送，@ 可提醒）" autocomplete="off"></textarea>
           <input type="file" id="image-input" accept="image/*" style="display: none;">
           <button id="img-btn">图</button>
@@ -467,7 +493,7 @@ public class WebPages {
           <div class="calendar" onclick="event.stopPropagation()">
             <div class="calendar-header">
               <button type="button" onclick="calPrevMonth()">‹</button>
-              <span id="cal-title"></span>
+              <button type="button" id="cal-title" title="点击选择年份"></button>
               <button type="button" onclick="calNextMonth()">›</button>
             </div>
             <div class="calendar-weekdays">
@@ -475,6 +501,7 @@ public class WebPages {
               <span>四</span><span>五</span><span>六</span>
             </div>
             <div class="calendar-days" id="cal-days"></div>
+            <div class="calendar-years" id="cal-years" style="display:none;"></div>
             <div class="calendar-footer">
               <button type="button" onclick="closeCalendar()">关闭</button>
             </div>
@@ -533,10 +560,126 @@ public class WebPages {
           var d = new Date();
           return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
         }
-        function autoResizeInput() {
-          input.style.height = 'auto';
-          input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+        // ==================== 输入框高度 ====================
+        var INPUT_MIN_H = 42;                 // 单行高度
+        var INPUT_AUTO_MAX_H = 120;           // 自动增高时的上限
+        var inputResizeHandle = document.getElementById('input-resize');
+        // 用户手动拖过的高度；null 表示仍按内容自动增高
+        var userInputHeight = null;
+
+        function inputMaxHeight() {
+          return Math.max(INPUT_AUTO_MAX_H, Math.round(window.innerHeight * 0.5));
         }
+
+        /**
+         * 内容实际需要的高度（border-box 口径）。
+         *
+         * 直接用 scrollHeight 即可：它包含 padding，与 box-sizing: border-box 的
+         * height 同一口径。不要拿 scrollHeight - clientHeight 去推"文字高度"——
+         * 高度为 auto 时 clientHeight 是内容盒高度，两者相减会得出负值。
+         *
+         * 减去一点经验余量，让空输入框不会比单行高度高出几个像素。
+         */
+        function inputContentHeight() {
+          var prev = input.style.height;
+          input.style.height = 'auto';
+          var sh = input.scrollHeight;
+          input.style.height = prev;
+          return Math.max(INPUT_MIN_H, sh - 20);
+        }
+
+        function autoResizeInput() {
+          var maxH = inputMaxHeight();
+          if (userInputHeight !== null) {
+            // 用户指定了高度：只保证不低于内容所需，不再自动回落
+            input.style.height = Math.min(maxH, Math.max(userInputHeight, inputContentHeight())) + 'px';
+            return;
+          }
+          input.style.height = Math.min(maxH, Math.max(INPUT_MIN_H, inputContentHeight())) + 'px';
+        }
+
+        function setUserInputHeight(px) {
+          userInputHeight = Math.max(INPUT_MIN_H, Math.min(px, inputMaxHeight()));
+          autoResizeInput();
+        }
+        """;
+
+    /**
+     * HTML 模板按片段存放。
+     *
+     * 原因：JVM 的常量池里，单个字符串常量的 modified-UTF-8 编码不能超过 65535 字节。
+     * 整份模板塞进一个文本块会超限，javac 会报出一个很有误导性的 "未闭合字符串文字"。
+     * 拆成几段再用 + 拼接，拼接在编译期完成，运行时没有任何额外开销。
+     */
+    private static final String INDEX_HTML_PART2 = """
+
+        function resetUserInputHeight() {
+          userInputHeight = null;
+          input.style.height = 'auto';
+          autoResizeInput();
+        }
+
+        // 拖动上缘调整高度：向上拖变高，向下拖变矮
+        (function initInputResize() {
+          if (!inputResizeHandle) return;
+          var dragging = false;
+          var startY = 0;
+          var startH = 0;
+
+          inputResizeHandle.addEventListener('mousedown', function (e) {
+            dragging = true;
+            startY = e.clientY;
+            // 拖过之后就以当前实际高度为基准
+            startH = input.offsetHeight;
+            inputResizeHandle.classList.add('dragging');
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+          });
+
+          document.addEventListener('mousemove', function (e) {
+            if (!dragging) return;
+            setUserInputHeight(startH - (e.clientY - startY));
+            e.preventDefault();
+          });
+
+          document.addEventListener('mouseup', function () {
+            if (!dragging) return;
+            dragging = false;
+            inputResizeHandle.classList.remove('dragging');
+            document.body.style.cursor = '';
+          });
+
+          // 双击恢复自动高度
+          inputResizeHandle.addEventListener('dblclick', function (e) {
+            e.preventDefault();
+            resetUserInputHeight();
+          });
+
+          // 键盘可达：聚焦拖拽条后用上下箭头调整，Esc 复位
+          inputResizeHandle.tabIndex = 0;
+          inputResizeHandle.addEventListener('keydown', function (e) {
+            var base = (userInputHeight === null) ? INPUT_MIN_H : userInputHeight;
+            if (e.key === 'ArrowUp') {
+              setUserInputHeight(base + 12);      // 上箭头 = 变高
+              e.preventDefault();
+            } else if (e.key === 'ArrowDown') {
+              setUserInputHeight(base - 12);      // 下箭头 = 变矮
+              e.preventDefault();
+            } else if (e.key === 'Escape') {
+              resetUserInputHeight();
+              e.preventDefault();
+            }
+          });
+        })();
+
+        // 首次按内容定高，否则会停在浏览器给 textarea 的默认高度上
+        autoResizeInput();
+
+        // 窗口尺寸变化时重新夹取，避免高度超出新的上限
+        window.addEventListener('resize', function () {
+          if (userInputHeight !== null) setUserInputHeight(userInputHeight);
+        });
+
         function updateTitle() {
           document.title = unreadCount > 0 ? '(' + unreadCount + ') ' + BASE_TITLE : BASE_TITLE;
         }
@@ -1169,6 +1312,11 @@ public class WebPages {
         // ==================== 日历 ====================
         var calYear = 0;
         var calMonth = 0;   // 0-11
+        // 'month' = 日期网格；'year' = 年份网格（点标题切换）
+        var calView = 'month';
+
+        // 点击标题在"日期 / 年份"两种视图间切换，用于快速跳到很久以前的记录
+        document.getElementById('cal-title').addEventListener('click', calToggleYearView);
 
         function openCalendar() {
           var now = new Date();
@@ -1182,20 +1330,63 @@ public class WebPages {
           document.getElementById('calendar-mask').classList.remove('show');
         }
 
+        // 左右箭头在两种视图下含义不同：日期视图翻月，年份视图翻 12 年
         function calPrevMonth() {
+          if (calView === 'year') { calYear -= 12; renderYearGrid(); return; }
           calMonth--;
           if (calMonth < 0) { calMonth = 11; calYear--; }
           renderCalendar();
         }
 
         function calNextMonth() {
+          if (calView === 'year') { calYear += 12; renderYearGrid(); return; }
           calMonth++;
           if (calMonth > 11) { calMonth = 0; calYear++; }
           renderCalendar();
         }
 
+        // 点标题：日期视图 ⇄ 年份视图
+        function calToggleYearView() {
+          if (calView === 'year') { renderCalendar(); return; }
+          renderYearGrid();
+        }
+
+        function renderYearGrid() {
+          calView = 'year';
+          document.getElementById('cal-title').textContent = '选择年份';
+
+          var base = calYear - 5;   // 让当前年份大致居中
+          var box = document.getElementById('cal-years');
+          box.innerHTML = '';
+          for (var i = 0; i < 12; i++) {
+            var y = base + i;
+            var el = document.createElement('button');
+            el.type = 'button';
+            el.className = 'cal-year-cell' + (y === calYear ? ' current' : '');
+            el.textContent = y + '';
+            (function (yy) {
+              el.onclick = function () { calYear = yy; renderCalendar(); };
+            })(y);
+            box.appendChild(el);
+          }
+
+          document.getElementById('cal-days').style.display = 'none';
+          document.querySelector('.calendar-weekdays').style.display = 'none';
+          box.style.display = 'grid';
+        }
+
         function renderCalendar() {
+          calView = 'month';
           document.getElementById('cal-title').textContent = calYear + '年' + (calMonth + 1) + '月';
+
+          // 从年份视图切回来时恢复日期网格
+          document.getElementById('cal-years').style.display = 'none';
+          document.querySelector('.calendar-weekdays').style.display = '';
+          document.getElementById('cal-days').style.display = '';
+        """;
+
+    private static final String INDEX_HTML_PART3 = """
+
           var daysBox = document.getElementById('cal-days');
           daysBox.innerHTML = '';
 
@@ -1569,7 +1760,23 @@ public class WebPages {
           e.target.value = '';
         };
         </script></body></html>
-        """.replace("__SITE_TITLE__", Config.SITE_TITLE)
-            .replace("__IMAGE_MAX_WIDTH__", String.valueOf(Config.IMAGE_MAX_WIDTH))
-            .replace("__IMAGE_QUALITY__", String.valueOf(Config.IMAGE_QUALITY));
+        """;
+
+    /**
+     * 完整页面：三段拼接后再替换模板占位符。
+     *
+     * 这里刻意用 StringBuilder 在**运行时**拼接。如果写成常量表达式相加，
+     * javac 会把三段折叠成一个 85KB 的字符串常量，又会撞上 65535 字节上限，
+     * 等于白拆。走 StringBuilder 就不会折叠。
+     */
+    public static final String INDEX_HTML = buildIndexHtml();
+
+    private static String buildIndexHtml() {
+        StringBuilder sb = new StringBuilder(90000);
+        sb.append(INDEX_HTML_PART1).append(INDEX_HTML_PART2).append(INDEX_HTML_PART3);
+        return sb.toString()
+                .replace("__SITE_TITLE__", Config.SITE_TITLE)
+                .replace("__IMAGE_MAX_WIDTH__", String.valueOf(Config.IMAGE_MAX_WIDTH))
+                .replace("__IMAGE_QUALITY__", String.valueOf(Config.IMAGE_QUALITY));
+    }
 }

@@ -106,7 +106,11 @@ public class PostPage {
           .preview-content img {
             max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px;
             cursor: grab; user-select: none; -webkit-user-drag: none;
-          }
+            /* 拖动时每帧改 transform，必须让图片拥有独立合成层，否则会留下拖影 */
+            will-change: transform;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+                    }
           .preview-content img.dragging { cursor: grabbing; }
           .preview-content img.smooth { transition: transform 0.1s ease-out; }
           .preview-actions { display: flex; gap: 12px; }
@@ -803,7 +807,11 @@ public class PostPage {
           .preview-content img {
             max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px;
             cursor: grab; user-select: none; -webkit-user-drag: none;
-          }
+            /* 拖动时每帧改 transform，必须让图片拥有独立合成层，否则会留下拖影 */
+            will-change: transform;
+            transform: translateZ(0);
+            backface-visibility: hidden;
+                    }
           .preview-content img.dragging { cursor: grabbing; }
           .preview-content img.smooth { transition: transform 0.1s ease-out; }
           .preview-actions { display: flex; gap: 12px; }

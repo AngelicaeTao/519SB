@@ -36,6 +36,18 @@ public class ProfilePage {
           }
           .form-row input:focus { border-color: #07c160; }
           .form-row input:disabled { background: #f5f5f5; color: #999; cursor: not-allowed; }
+
+          /* 密码框的显示/隐藏切换（样式需覆盖页面通用的全宽绿色 button） */
+          .pw-wrap { position: relative; }
+          .pw-wrap input { padding-right: 42px; }
+          .pw-toggle {
+            position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+            width: auto; padding: 4px 6px; font-size: 15px; line-height: 1;
+            background: none; border: none; border-radius: 6px;
+            color: #999; cursor: pointer;
+          }
+          .pw-toggle:hover { background: none; color: #07c160; }
+          .pw-toggle.on { color: #07c160; }
           button {
             width: 100%; padding: 11px; font-size: 15px; font-weight: 500;
             background: #07c160; color: #fff; border: none; border-radius: 8px;
@@ -81,15 +93,24 @@ public class ProfilePage {
             <div id="pwd-msg" class="msg"></div>
             <div class="form-row">
               <label>旧密码</label>
-              <input type="password" id="old-password" placeholder="请输入旧密码" autocomplete="current-password">
+              <div class="pw-wrap">
+                <input type="password" id="old-password" placeholder="请输入旧密码" autocomplete="current-password">
+                <button type="button" class="pw-toggle" title="显示密码">👁</button>
+              </div>
             </div>
             <div class="form-row">
               <label>新密码</label>
-              <input type="password" id="new-password" placeholder="6~50 位，含字母和数字" autocomplete="new-password">
+              <div class="pw-wrap">
+                <input type="password" id="new-password" placeholder="6~50 位，含字母和数字" autocomplete="new-password">
+                <button type="button" class="pw-toggle" title="显示密码">👁</button>
+              </div>
             </div>
             <div class="form-row">
               <label>确认新密码</label>
-              <input type="password" id="new-password2" placeholder="再次输入新密码" autocomplete="new-password">
+              <div class="pw-wrap">
+                <input type="password" id="new-password2" placeholder="再次输入新密码" autocomplete="new-password">
+                <button type="button" class="pw-toggle" title="显示密码">👁</button>
+              </div>
             </div>
             <button onclick="changePassword()">修改密码</button>
           </div>
@@ -103,6 +124,25 @@ public class ProfilePage {
         let currentAvatarId = localStorage.getItem('avatarId') || null;
         if (currentAvatarId === 'null') currentAvatarId = null;
         let currentNickname = localStorage.getItem('nickname') || USERNAME;
+
+        // 密码框显示/隐藏：切换 input.type，值仍走 element.value，切换后不丢内容
+        function initPasswordToggles() {
+          document.querySelectorAll('.pw-toggle').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+              e.preventDefault();
+              var input = btn.parentElement.querySelector('input');
+              if (!input) return;
+              var show = input.type === 'password';
+              input.type = show ? 'text' : 'password';
+              btn.textContent = show ? '🙈' : '👁';
+              btn.classList.toggle('on', show);
+              btn.title = show ? '隐藏密码' : '显示密码';
+              btn.setAttribute('aria-label', btn.title);
+              input.focus();
+            });
+          });
+        }
+        initPasswordToggles();
 
         let isSaved = false;
 

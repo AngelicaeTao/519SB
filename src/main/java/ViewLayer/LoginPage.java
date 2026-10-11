@@ -52,6 +52,20 @@ public class LoginPage {
           .msg.error { background: #fee; color: #c33; }
           .msg.success { background: #efe; color: #3a3; }
           .tip { text-align: center; font-size: 12px; color: #999; margin-top: 16px; }
+          .field-hint { font-size: 11px; color: #999; margin: -8px 0 12px 2px; line-height: 1.5; }
+          .field-hint b { color: #667eea; font-weight: 500; }
+
+          /* 密码框的显示/隐藏切换 */
+          .pw-wrap { position: relative; }
+          .pw-wrap input { padding-right: 42px; }
+          .pw-toggle {
+            position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+            width: auto; padding: 4px 6px; font-size: 15px; line-height: 1;
+            background: none; border: none; border-radius: 6px;
+            color: #999; cursor: pointer;
+          }
+          .pw-toggle:hover { background: none; color: #667eea; }
+          .pw-toggle.on { color: #667eea; }
         </style></head><body>
         <div class="card">
           <h1>519SB 聊天室</h1>
@@ -67,16 +81,25 @@ public class LoginPage {
           <!-- 登录 -->
           <div class="form active" data-form="login">
             <input type="text" id="login-user" placeholder="用户名" autocomplete="username">
-            <input type="password" id="login-pass" placeholder="密码" autocomplete="current-password">
+            <div class="pw-wrap">
+              <input type="password" id="login-pass" placeholder="密码" autocomplete="current-password">
+              <button type="button" class="pw-toggle" title="显示密码">👁</button>
+            </div>
             <button onclick="doLogin()">登录</button>
           </div>
 
           <!-- 注册 -->
           <div class="form" data-form="register">
-            <input type="text" id="reg-user" placeholder="账号（不超过 20 字）" autocomplete="off">
+            <input type="text" id="reg-user" placeholder="账号" autocomplete="off"
+                   maxlength="20" pattern="[0-9A-Za-z_]{1,20}"
+                   title="账号只能使用数字、字母和下划线，最多 20 位">
+            <div class="field-hint">账号：<b>只能使用数字、字母、下划线</b>，最多 20 位（例如 <code>xiao_ming</code> 或 <code>user2026</code>）</div>
             <input type="text" id="reg-nick" placeholder="昵称（不超过 20 字）" autocomplete="off">
             <input type="password" id="reg-pass" placeholder="密码（6~50 位，含字母和数字）" autocomplete="new-password">
-            <input type="password" id="reg-pass2" placeholder="确认密码" autocomplete="new-password">
+            <div class="pw-wrap">
+              <input type="password" id="reg-pass2" placeholder="确认密码" autocomplete="new-password">
+              <button type="button" class="pw-toggle" title="显示密码">👁</button>
+            </div>
             <button onclick="doRegister()">注册并登录</button>
           </div>
 
@@ -85,6 +108,26 @@ public class LoginPage {
 
         <script>
         const msgEl = document.getElementById('msg');
+
+        // 密码框显示/隐藏：切换 input 的 type，不搬动值本身，
+        // 因此读取仍统一走 element.value，切换后不会丢内容。
+        function initPasswordToggles() {
+          document.querySelectorAll('.pw-toggle').forEach(function (btn) {
+            btn.addEventListener('click', function (e) {
+              e.preventDefault();
+              var input = btn.parentElement.querySelector('input');
+              if (!input) return;
+              var show = input.type === 'password';
+              input.type = show ? 'text' : 'password';
+              btn.textContent = show ? '🙈' : '👁';
+              btn.classList.toggle('on', show);
+              btn.title = show ? '隐藏密码' : '显示密码';
+              btn.setAttribute('aria-label', btn.title);
+              input.focus();
+            });
+          });
+        }
+        initPasswordToggles();
 
         document.querySelectorAll('.tab').forEach(tab => {
           tab.onclick = () => {
@@ -141,6 +184,12 @@ public class LoginPage {
           const password2 = document.getElementById('reg-pass2').value;
           if (!username || !password) { showMsg('请输入账号和密码', 'error'); return; }
           if (!nickname) { showMsg('请输入昵称', 'error'); return; }
+          // 与服务端 checkUsernameFormat 保持一致：只允许数字、字母、下划线
+          const bad = username.match(/[^0-9A-Za-z_]/);
+          if (bad) {
+            showMsg('账号只能使用数字、字母和下划线，不能含「' + bad[0] + '」', 'error');
+            return;
+          }
           if (password !== password2) { showMsg('两次输入的密码不一致', 'error'); return; }
           try {
             const r = await api('/api/register', { username, password, nickname });
