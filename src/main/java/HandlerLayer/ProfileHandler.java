@@ -28,6 +28,7 @@ public class ProfileHandler {
     }
 
     public void handleUpdate(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String username = sessions.getUser(token);
         if (username == null) {
@@ -35,7 +36,7 @@ public class ProfileHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String nickname = HttpUtil.extractJsonString(body, "nickname");
         String avatarId = HttpUtil.extractJsonString(body, "avatarId");
         if (body.contains("\"avatarId\":null")) avatarId = null;
@@ -67,6 +68,7 @@ public class ProfileHandler {
 
     /** 修改密码：需要登录 + 旧密码校验 */
     public void handleChangePassword(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String username = sessions.getUser(token);
         if (username == null) {
@@ -74,7 +76,7 @@ public class ProfileHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String oldPassword = HttpUtil.extractJsonString(body, "oldPassword");
         String newPassword = HttpUtil.extractJsonString(body, "newPassword");
 
@@ -99,7 +101,19 @@ public class ProfileHandler {
         }
 
         if (userStore.changePassword(username, newPassword)) {
-            HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"msg\":\"密码修改成功\"}");
+            // 密码已变更，所有旧会话一律作废——改密码的目的通常就是"怀疑账号被别人登录着"，
+            // 如果旧 token 还能用，用户会误以为已经安全了。
+            // 当前这个客户端重新签发一个 token，避免改完密码把自己也踢出去。
+            sessions.removeAllSessionsOfUser(username);
+            String newToken = sessions.createSession(username);
+            if (newToken == null) {
+                HttpUtil.sendJson(ex, 200,
+                        "{\"ok\":true,\"msg\":\"密码修改成功，请重新登录\",\"token\":null}");
+                return;
+            }
+            HttpUtil.sendJson(ex, 200,
+                    "{\"ok\":true,\"msg\":\"密码修改成功，其它设备已全部下线\","
+                            + "\"token\":\"" + HttpUtil.escapeJson(newToken) + "\"}");
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"修改失败\"}");
         }

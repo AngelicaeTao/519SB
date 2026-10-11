@@ -27,7 +27,6 @@ public class MessageStore {
         long now = System.currentTimeMillis();
         long newId = -1;
 
-        // 一次连接完成插入
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "INSERT INTO messages(username, text, time, type, created_at) VALUES(?,?,?,?,?)",
@@ -46,7 +45,6 @@ public class MessageStore {
             return -1;
         }
 
-        // 每 20 条清理一次，减少数据库压力
         if (insertCounter.incrementAndGet() % 20 == 0) {
             try (Connection conn = DatabaseManager.getConnection();
                  PreparedStatement ps = conn.prepareStatement(
@@ -63,44 +61,54 @@ public class MessageStore {
     }
 
     public List<String> recent(int limit) {
-        List<String> result = new ArrayList<>();
-        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, " +
+        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, m.created_at, " +
                 "COALESCE(u.nickname, m.username) AS nickname, u.avatar_id " +
                 "FROM messages m LEFT JOIN users u ON m.username = u.username " +
                 "ORDER BY m.id DESC LIMIT ?";
-
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, limit);
-            try (ResultSet rs = ps.executeQuery()) {
-                List<String> reversed = new ArrayList<>();
-                while (rs.next()) reversed.add(rowToJson(rs));
-                for (int i = reversed.size() - 1; i >= 0; i--) result.add(reversed.get(i));
-            }
-        } catch (SQLException e) {
-            System.err.println("[MessageStore] 查询最近消息失败：" + e.getMessage());
-        }
-        return result;
+        return queryList(sql, stmt -> stmt.setInt(1, limit));
     }
 
     public List<String> loadBefore(long beforeId, int limit) {
-        List<String> result = new ArrayList<>();
-        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, " +
+        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, m.created_at, " +
                 "COALESCE(u.nickname, m.username) AS nickname, u.avatar_id " +
                 "FROM messages m LEFT JOIN users u ON m.username = u.username " +
                 "WHERE m.id < ? ORDER BY m.id DESC LIMIT ?";
+        return queryList(sql, stmt -> {
+            stmt.setLong(1, beforeId);
+            stmt.setInt(2, limit);
+        });
+    }
 
+    /** 抽取公共查询：出错时降级为不带 created_at 的查询，确保历史至少能出来 */
+    private interface Binder { void bind(PreparedStatement ps) throws SQLException; }
+
+    private List<String> queryList(String sql, Binder binder) {
+        List<String> result = new ArrayList<>();
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setLong(1, beforeId);
-            ps.setInt(2, limit);
+            binder.bind(ps);
             try (ResultSet rs = ps.executeQuery()) {
                 List<String> reversed = new ArrayList<>();
-                while (rs.next()) reversed.add(rowToJson(rs));
+                while (rs.next()) reversed.add(rowToJson(rs, true));
                 for (int i = reversed.size() - 1; i >= 0; i--) result.add(reversed.get(i));
             }
+            return result;
         } catch (SQLException e) {
-            System.err.println("[MessageStore] 加载历史失败：" + e.getMessage());
+            // 旧库没有 created_at 列：降级查询
+            System.err.println("[MessageStore] 带 created_at 查询失败，尝试降级：" + e.getMessage());
+        }
+
+        String fallback = sql.replace("m.created_at,", "0 AS created_at,");
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(fallback)) {
+            binder.bind(ps);
+            try (ResultSet rs = ps.executeQuery()) {
+                List<String> reversed = new ArrayList<>();
+                while (rs.next()) reversed.add(rowToJson(rs, false));
+                for (int i = reversed.size() - 1; i >= 0; i--) result.add(reversed.get(i));
+            }
+        } catch (SQLException e2) {
+            System.err.println("[MessageStore] 降级查询也失败：" + e2.getMessage());
         }
         return result;
     }
@@ -173,9 +181,14 @@ public class MessageStore {
         }
     }
 
-    private String rowToJson(ResultSet rs) throws SQLException {
+    private String rowToJson(ResultSet rs, boolean hasCreatedAt) throws SQLException {
         String avatarId = rs.getString("avatar_id");
+        long createdAt = 0;
+        if (hasCreatedAt) {
+            try { createdAt = rs.getLong("created_at"); } catch (SQLException ignored) {}
+        }
         return "{\"id\":" + rs.getLong("id")
+                + ",\"createdAt\":" + createdAt
                 + ",\"username\":\"" + HttpUtil.escapeJson(rs.getString("username"))
                 + "\",\"nickname\":\"" + HttpUtil.escapeJson(rs.getString("nickname"))
                 + "\",\"avatarId\":" + (avatarId == null ? "null" : "\"" + HttpUtil.escapeJson(avatarId) + "\"")

@@ -217,10 +217,20 @@ public class ProfilePage {
             });
             const r = await res.json();
             if (r.ok) {
-              showMsg('pwd-msg', '密码修改成功', 'success');
               document.getElementById('old-password').value = '';
               document.getElementById('new-password').value = '';
               document.getElementById('new-password2').value = '';
+              if (r.token) {
+                // 服务端已吊销全部旧会话并签发了新 token，存下后重载页面。
+                // 重载会带着新 token 重建 SSE 长连接，避免还挂着已失效的旧连接。
+                localStorage.setItem('token', r.token);
+                showMsg('pwd-msg', r.msg || '密码修改成功', 'success');
+                setTimeout(() => location.reload(), 800);
+              } else {
+                // 服务端没能签发新 token，只能要求重新登录
+                showMsg('pwd-msg', r.msg || '密码修改成功，请重新登录', 'success');
+                setTimeout(() => { localStorage.clear(); location.href = '/login'; }, 1200);
+              }
             } else {
               showMsg('pwd-msg', r.msg || '修改失败', 'error');
             }

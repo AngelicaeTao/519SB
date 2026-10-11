@@ -50,6 +50,7 @@ public class AdminHandler {
     }
 
     public void handleListUsers(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String username = sessions.getUser(token);
         if (username == null || !isAdmin(username)) {
@@ -75,6 +76,7 @@ public class AdminHandler {
     }
 
     public void handleUpdateUser(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String operator = sessions.getUser(token);
         if (operator == null || !isAdmin(operator)) {
@@ -82,7 +84,7 @@ public class AdminHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String target = HttpUtil.extractJsonString(body, "username");
         String nickname = HttpUtil.extractJsonString(body, "nickname");
         String newPassword = HttpUtil.extractJsonString(body, "newPassword");
@@ -119,6 +121,7 @@ public class AdminHandler {
 
     /** POST /api/admin/deleteUser?token=xxx  body: {"username":".."} */
     public void handleDeleteUser(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String operator = sessions.getUser(token);
         if (operator == null || !isAdmin(operator)) {
@@ -126,7 +129,7 @@ public class AdminHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String target = HttpUtil.extractJsonString(body, "username");
 
         if (target == null || target.isBlank()) {
@@ -160,6 +163,7 @@ public class AdminHandler {
     }
 
     public void handleUserMessages(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String operator = sessions.getUser(token);
         if (operator == null || !isAdmin(operator)) {
@@ -185,6 +189,7 @@ public class AdminHandler {
 
     /** POST /api/admin/deleteMessage?token=xxx  body: {"id": 123} */
     public void handleDeleteMessage(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String operator = sessions.getUser(token);
         if (operator == null || !isAdmin(operator)) {
@@ -192,7 +197,7 @@ public class AdminHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         Long id = extractLong(body, "id");
         if (id == null) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"缺少 id\"}");
@@ -208,6 +213,7 @@ public class AdminHandler {
 
     /** POST /api/admin/deleteMessages?token=xxx  body: {"ids":[1,2,3]} */
     public void handleDeleteMessages(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String operator = sessions.getUser(token);
         if (operator == null || !isAdmin(operator)) {
@@ -215,7 +221,7 @@ public class AdminHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         List<Long> ids = extractLongArray(body, "ids");
         if (ids.isEmpty()) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"没有选中任何消息\"}");
@@ -228,6 +234,7 @@ public class AdminHandler {
 
     /** POST /api/admin/clearMessages?token=xxx  清空所有消息（保留用户和头像） */
     public void handleClearMessages(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         String operator = sessions.getUser(token);
         if (operator == null || !isAdmin(operator)) {
