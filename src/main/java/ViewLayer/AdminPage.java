@@ -209,7 +209,7 @@ public class AdminPage {
 
         async function loadUsers() {
           try {
-            const res = await fetch('/api/admin/users?token=' + encodeURIComponent(TOKEN));
+            const res = await fetch('/api/admin/users?token=' + encodeURIComponent(TOKEN), { method: 'POST' });
             const r = await res.json();
             if (!r.ok) { showMsg('list-msg', r.msg || '加载失败', 'error'); return; }
             renderUsers(r.users);
@@ -403,7 +403,7 @@ public class AdminPage {
           document.getElementById('msg-mask').classList.add('show');
 
           try {
-            const res = await fetch('/api/admin/userMessages?token=' + encodeURIComponent(TOKEN) + '&username=' + encodeURIComponent(u.username));
+            const res = await fetch('/api/admin/userMessages?token=' + encodeURIComponent(TOKEN) + '&username=' + encodeURIComponent(u.username), { method: 'POST' });
             const r = await res.json();
             if (!r.ok) {
               const list = document.getElementById('msg-list');

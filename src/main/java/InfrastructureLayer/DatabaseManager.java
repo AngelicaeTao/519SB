@@ -72,7 +72,9 @@ public class DatabaseManager {
                     id TEXT PRIMARY KEY,
                     data BLOB NOT NULL,
                     type TEXT NOT NULL DEFAULT 'message',
-                    created_at INTEGER NOT NULL
+                    created_at INTEGER NOT NULL,
+                    username TEXT,
+                    mime TEXT
                 )
             """);
 
@@ -94,9 +96,15 @@ public class DatabaseManager {
                     author TEXT NOT NULL,
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL,
-                    views INTEGER NOT NULL DEFAULT 0
+                    views INTEGER NOT NULL DEFAULT 0,
+                    images TEXT
                 )
             """);
+
+            // 老库迁移：补 images 列
+            try {
+                st.execute("ALTER TABLE posts ADD COLUMN images TEXT");
+            } catch (SQLException ignored) {}
 
             // 帖子点赞表
             st.execute("""
@@ -125,6 +133,26 @@ public class DatabaseManager {
                 st.execute("ALTER TABLE images ADD COLUMN type TEXT NOT NULL DEFAULT 'message'");
             } catch (SQLException ignored) {}
 
+            // 图片归属用户，用于每用户上传配额
+            try {
+                st.execute("ALTER TABLE images ADD COLUMN username TEXT");
+            } catch (SQLException ignored) {}
+
+            // 图片真实 MIME（由文件头判定），用于按真实类型返回 Content-Type
+            try {
+                st.execute("ALTER TABLE images ADD COLUMN mime TEXT");
+            } catch (SQLException ignored) {}
+
+            // ====== 兼容旧库：messages 表可能没有 created_at 列 ======
+            // 老的 chat.db 里没有这一列时，MessageStore 里带 m.created_at 的
+            // SELECT 会整个报错，导致历史和分页全部为空。这里补上。
+            try {
+                st.execute("ALTER TABLE messages ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0");
+                System.out.println("[DB] 已为 messages 添加 created_at 列");
+            } catch (SQLException ignored) {
+                // 列已存在
+            }
+
             // 老数据库迁移：给 post_comments 补 parent_id 列
             try {
                 st.execute("ALTER TABLE post_comments ADD COLUMN parent_id INTEGER DEFAULT NULL");
@@ -135,6 +163,7 @@ public class DatabaseManager {
             st.execute("CREATE INDEX IF NOT EXISTS idx_messages_created ON messages(created_at)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_messages_username ON messages(username)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_images_created ON images(created_at)");
+            st.execute("CREATE INDEX IF NOT EXISTS idx_images_username ON images(username)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_sessions_last_active ON sessions(last_active)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_posts_author ON posts(author)");
             st.execute("CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at)");

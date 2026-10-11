@@ -47,3 +47,27 @@ send.window.ms=3000
 # Session 有效期（天）。超过这个时间没操作就自动退出登录
 # 常用值：1（一天）、7（一周）、30（一个月）、365（一年）
 session.ttl.days=30
+
+# 可信反向代理地址（逗号分隔）。只有当直连请求来自这些地址时，才采信 X-Forwarded-For。
+# 默认只信本机，因为 ngrok 就跑在本机、由它转发外网流量。
+# 如果换成 Cloudflare / frp / nginx 等部署，把它们的前置地址加进来，否则 IP 限流会被伪造头绕过。
+trusted.proxies=127.0.0.1,::1
+
+# 单个用户可上传的图片总字节上限（默认 200MB），防止灌满磁盘
+max.image.bytes.per.user=209715200
+
+# 单个用户可上传的图片条数上限（默认 300）
+max.image.count.per.user=300
+
+# SSE 长连接空闲多久后自动断开（毫秒，默认 10 分钟）
+# 用于回收挂死的连接，避免它们长期占用「每用户 3 条 / 每 IP 10 条」的名额
+sse.idle.timeout.ms=600000
+
+# 服务器启动完成后是否自动打开浏览器（默认开）
+# 会先向 ngrok 的本地 API（127.0.0.1:4040）要公网地址，然后打开 <公网地址>/login，
+# 也就是你发给朋友的那个链接；检测不到 ngrok 时退回 https://localhost:<端口>。
+# 无图形界面的环境（服务器、Docker）建议改成 false
+auto.open.browser=true
+
+# 自动打开的目标路径（默认登录页；想直接进聊天室或论坛改成 /chat 、/posts）
+auto.open.path=/login

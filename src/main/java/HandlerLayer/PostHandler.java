@@ -11,6 +11,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -63,55 +64,23 @@ public class PostHandler implements HttpHandler {
         ex.close();
     }
 
-    // ---------------- API ----------------
-
     private void handleApi(HttpExchange ex, String path) throws IOException {
         String method = ex.getRequestMethod();
 
         if (path.equals("/api/posts") && "GET".equalsIgnoreCase(method)) {
             String idStr = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "id");
-            if (idStr == null) {
-                handleList(ex);
-            } else {
-                handleGetOne(ex, idStr);
-            }
+            if (idStr == null) handleList(ex);
+            else handleGetOne(ex, idStr);
             return;
         }
 
-        if (path.equals("/api/posts") && "POST".equalsIgnoreCase(method)) {
-            handleCreate(ex);
-            return;
-        }
-
-        if (path.equals("/api/posts/update") && "POST".equalsIgnoreCase(method)) {
-            handleUpdate(ex);
-            return;
-        }
-
-        if (path.equals("/api/posts/delete") && "POST".equalsIgnoreCase(method)) {
-            handleDelete(ex);
-            return;
-        }
-
-        if (path.equals("/api/posts/like") && "POST".equalsIgnoreCase(method)) {
-            handleToggleLike(ex);
-            return;
-        }
-
-        if (path.equals("/api/posts/comment") && "POST".equalsIgnoreCase(method)) {
-            handleAddComment(ex);
-            return;
-        }
-
-        if (path.equals("/api/posts/comments") && "GET".equalsIgnoreCase(method)) {
-            handleListComments(ex);
-            return;
-        }
-
-        if (path.equals("/api/posts/deleteComment") && "POST".equalsIgnoreCase(method)) {
-            handleDeleteComment(ex);
-            return;
-        }
+        if (path.equals("/api/posts") && "POST".equalsIgnoreCase(method)) { handleCreate(ex); return; }
+        if (path.equals("/api/posts/update") && "POST".equalsIgnoreCase(method)) { handleUpdate(ex); return; }
+        if (path.equals("/api/posts/delete") && "POST".equalsIgnoreCase(method)) { handleDelete(ex); return; }
+        if (path.equals("/api/posts/like") && "POST".equalsIgnoreCase(method)) { handleToggleLike(ex); return; }
+        if (path.equals("/api/posts/comment") && "POST".equalsIgnoreCase(method)) { handleAddComment(ex); return; }
+        if (path.equals("/api/posts/comments") && "GET".equalsIgnoreCase(method)) { handleListComments(ex); return; }
+        if (path.equals("/api/posts/deleteComment") && "POST".equalsIgnoreCase(method)) { handleDeleteComment(ex); return; }
 
         HttpUtil.sendJson(ex, 404, "{\"ok\":false,\"msg\":\"接口不存在\"}");
     }
@@ -129,9 +98,8 @@ public class PostHandler implements HttpHandler {
 
     private void handleGetOne(HttpExchange ex, String idStr) throws IOException {
         long id;
-        try {
-            id = Long.parseLong(idStr.trim());
-        } catch (NumberFormatException e) {
+        try { id = Long.parseLong(idStr.trim()); }
+        catch (NumberFormatException e) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"非法 id\"}");
             return;
         }
@@ -163,7 +131,7 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String title = HttpUtil.extractJsonString(body, "title");
         String content = HttpUtil.extractJsonString(body, "content");
 
@@ -173,7 +141,9 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        long id = postStore.create(title.trim(), content, username);
+        String imagesJson = parseImagesJson(body);
+
+        long id = postStore.create(title.trim(), content, username, imagesJson);
         if (id > 0) {
             HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"id\":" + id + "}");
         } else {
@@ -189,7 +159,7 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         Long id = extractLong(body, "id");
         String title = HttpUtil.extractJsonString(body, "title");
         String content = HttpUtil.extractJsonString(body, "content");
@@ -214,7 +184,9 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        if (postStore.update(id, title.trim(), content)) {
+        String imagesJson = parseImagesJson(body);
+
+        if (postStore.update(id, title.trim(), content, imagesJson)) {
             HttpUtil.sendJson(ex, 200, "{\"ok\":true}");
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"更新失败\"}");
@@ -229,7 +201,7 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         Long id = extractLong(body, "id");
         if (id == null) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"缺少 id\"}");
@@ -268,15 +240,49 @@ public class PostHandler implements HttpHandler {
         return null;
     }
 
+    /**
+     * 从请求体里解析 images 数组，返回 JSON 数组字符串（如 ["id1","id2"]）。
+     * 无图片返回 null。会过滤掉非法的图片 ID，防止注入。
+     */
+    private String parseImagesJson(String body) {
+        if (body == null) return null;
+        int keyIdx = body.indexOf("\"images\"");
+        if (keyIdx < 0) return null;
+        int lb = body.indexOf('[', keyIdx);
+        int rb = body.indexOf(']', lb);
+        if (lb < 0 || rb < 0) return null;
+        String inner = body.substring(lb + 1, rb).trim();
+        if (inner.isEmpty()) return null;
+
+        // 图片 ID 必须是 32 位小写 hex
+        Pattern idPattern = Pattern.compile("\"([a-f0-9]{32})\"");
+        Matcher m = idPattern.matcher(inner);
+        List<String> ids = new ArrayList<>();
+        while (m.find() && ids.size() < 9) {
+            ids.add(m.group(1));
+        }
+        if (ids.isEmpty()) return null;
+
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < ids.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\"").append(ids.get(i)).append("\"");
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
     private String toJson(Post p) {
         return "{\"id\":" + p.id
                 + ",\"title\":\"" + HttpUtil.escapeJson(p.title) + "\""
                 + ",\"content\":\"" + HttpUtil.escapeJson(p.content) + "\""
                 + ",\"author\":\"" + HttpUtil.escapeJson(p.author) + "\""
                 + ",\"authorNickname\":\"" + HttpUtil.escapeJson(p.authorNickname == null ? p.author : p.authorNickname) + "\""
+                + ",\"images\":" + (p.images == null ? "null" : p.images)
                 + ",\"createdAt\":" + p.createdAt
                 + ",\"updatedAt\":" + p.updatedAt
-                + ",\"views\":" + p.views + "}";
+                + ",\"views\":" + p.views
+                + ",\"likeCount\":" + p.likeCount + "}";
     }
 
     // ---------------- 点赞 ----------------
@@ -289,7 +295,7 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         Long postId = extractLong(body, "postId");
         if (postId == null) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"缺少 postId\"}");
@@ -315,7 +321,7 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         Long postId = extractLong(body, "postId");
         Long parentId = extractLong(body, "parentId");
         String content = HttpUtil.extractJsonString(body, "content");
@@ -375,7 +381,7 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         Long commentId = extractLong(body, "id");
         if (commentId == null) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"缺少 id\"}");

@@ -9,21 +9,92 @@ import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** 管理所有 SSE 客户端连接，负责广播和踢人 */
 public class SseManager {
 
     private final Map<OutputStream, String> clients = new ConcurrentHashMap<>();
-    private final ExecutorService broadcaster = Executors.newVirtualThreadPerTaskExecutor();
+    /** 每个连接对应的来源 IP，用于注销时修正计数 */
+    private final Map<OutputStream, String> clientIps = new ConcurrentHashMap<>();
+    /** 每个连接对应的用户名，用于注销时修正计数 */
+    private final Map<OutputStream, String> clientUsers = new ConcurrentHashMap<>();
+    /** 每个连接的最后收发时间，用于空闲超时回收 */
+    private final Map<OutputStream, Long> clientActivity = new ConcurrentHashMap<>();
+    /** 每 IP 的 SSE 连接数，用于限制单机压连接 */
+    private final Map<String, AtomicInteger> perIpCount = new ConcurrentHashMap<>();
+    private final AtomicInteger globalCount = new AtomicInteger(0);
 
-    public void register(OutputStream os, String username) {
+    /**
+     * 预占一个 SSE 连接名额（此时响应头还没发出去，超限可以正常返回 429）。
+     * 成功返回 true，之后必须调用 {@link #bind} 或 {@link #releaseReservation}。
+     */
+    public boolean tryRegister(String ip, int maxPerIp, int maxGlobal) {
+        String key = (ip == null || ip.isEmpty()) ? "unknown" : ip;
+
+        if (globalCount.incrementAndGet() > maxGlobal) {
+            globalCount.decrementAndGet();
+            return false;
+        }
+
+        AtomicInteger ipCount = perIpCount.computeIfAbsent(key, k -> new AtomicInteger(0));
+        if (ipCount.incrementAndGet() > maxPerIp) {
+            ipCount.decrementAndGet();
+            globalCount.decrementAndGet();
+            return false;
+        }
+        return true;
+    }
+
+    /** 放弃已预占但未绑定的名额 */
+    public void releaseReservation(String ip) {
+        globalCount.decrementAndGet();
+        String key = (ip == null || ip.isEmpty()) ? "unknown" : ip;
+        AtomicInteger c = perIpCount.get(key);
+        if (c != null) c.decrementAndGet();
+    }
+
+    /** 把预占的名额绑定到具体的输出流上 */
+    public void bind(OutputStream os, String username, String ip) {
+        if (os == null || username == null) return;
+        String key = (ip == null || ip.isEmpty()) ? "unknown" : ip;
         clients.put(os, username);
+        clientIps.put(os, key);
+        clientUsers.put(os, username);
+        clientActivity.put(os, System.currentTimeMillis());
+    }
+
+    /** 刷新某连接的最后活动时间（心跳、发消息时调用），使其不被空闲超时回收 */
+    public void touch(OutputStream os) {
+        if (os == null) return;
+        if (clients.containsKey(os)) {
+            clientActivity.put(os, System.currentTimeMillis());
+        }
+    }
+
+    /** 该连接已空闲的毫秒数；未知连接返回 0（视为活跃，避免误杀） */
+    public long idleMillis(OutputStream os) {
+        if (os == null) return 0;
+        Long last = clientActivity.get(os);
+        if (last == null) return 0;
+        return System.currentTimeMillis() - last;
+    }
+
+    /** 尝试注册并立即绑定（非流式场景用） */
+    public boolean tryRegister(OutputStream os, String username, String ip,
+                               int maxPerIp, int maxGlobal) {
+        if (os == null || username == null) return false;
+        if (!tryRegister(ip, maxPerIp, maxGlobal)) return false;
+        bind(os, username, ip);
+        return true;
     }
 
     public void unregister(OutputStream os) {
-        clients.remove(os);
+        removeQuietly(os);
+    }
+
+    public int globalConnections() {
+        return Math.max(0, globalCount.get());
     }
 
     /** 统计某个用户当前的 SSE 连接数 */
@@ -40,18 +111,32 @@ public class SseManager {
         if (data == null) return;
         byte[] payload = ("data: " + data + "\n\n").getBytes(StandardCharsets.UTF_8);
 
+        // 同步写入：每个连接一个虚拟线程的做法会在客户端数量 × 消息频率下
+        // 产生无上限的线程提交，属于可被放大的资源消耗面。
         for (Map.Entry<OutputStream, String> e : clients.entrySet()) {
             OutputStream os = e.getKey();
-            broadcaster.submit(() -> {
-                try {
-                    synchronized (os) {
-                        os.write(payload);
-                        os.flush();
-                    }
-                } catch (IOException ex) {
-                    clients.remove(os);
+            try {
+                synchronized (os) {
+                    os.write(payload);
+                    os.flush();
                 }
-            });
+            } catch (IOException ex) {
+                removeQuietly(os);
+            }
+        }
+    }
+
+    /** 从注册表移除并修正计数（不关闭流，由持有者关闭） */
+    private void removeQuietly(OutputStream os) {
+        if (os == null) return;
+        if (clients.remove(os) == null) return;
+        globalCount.decrementAndGet();
+        String ip = clientIps.remove(os);
+        clientUsers.remove(os);
+        clientActivity.remove(os);
+        if (ip != null) {
+            AtomicInteger c = perIpCount.get(ip);
+            if (c != null) c.decrementAndGet();
         }
     }
 
@@ -59,6 +144,7 @@ public class SseManager {
         synchronized (os) {
             os.write(("data: " + data + "\n\n").getBytes(StandardCharsets.UTF_8));
         }
+        touch(os);
     }
 
     public void kickUser(String username) {
@@ -87,7 +173,7 @@ public class SseManager {
         }
         for (OutputStream os : toClose) {
             try { os.close(); } catch (IOException ignored) {}
-            clients.remove(os);
+            removeQuietly(os);
         }
     }
 

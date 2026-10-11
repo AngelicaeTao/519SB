@@ -55,7 +55,7 @@ public class AuthHandler {
             HttpUtil.sendJson(ex, 405, "{\"ok\":false,\"msg\":\"method not allowed\"}");
             return;
         }
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String code = HttpUtil.extractJsonString(body, "code");
 
         if (code != null && code.trim().equals(Config.ACCESS_CODE)) {
@@ -87,7 +87,7 @@ public class AuthHandler {
             return;
         }
 
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String username = HttpUtil.extractJsonString(body, "username");
         String password = HttpUtil.extractJsonString(body, "password");
         String nickname = HttpUtil.extractJsonString(body, "nickname");
@@ -130,7 +130,7 @@ public class AuthHandler {
         }
 
         String ip = BootstrapLayer.ChatServer.getClientIp(ex);
-        String body = HttpUtil.readBody(ex);
+        String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
         String username = HttpUtil.extractJsonString(body, "username");
         String password = HttpUtil.extractJsonString(body, "password");
 
@@ -182,7 +182,9 @@ public class AuthHandler {
         }
     }
 
+    /** POST /api/logout?token=xxx —— 登出（会作废该 token） */
     public void handleLogout(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         sessions.removeSession(token);
         HttpUtil.sendJson(ex, 200, "{\"ok\":true}");

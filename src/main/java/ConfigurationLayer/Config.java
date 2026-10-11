@@ -40,6 +40,24 @@ public class Config {
     /** Session 有效期（天） */
     public static final int SESSION_TTL_DAYS;
 
+    /** 可信反向代理地址（逗号分隔）。只有直连请求来自这些地址时，才采信 X-Forwarded-For */
+    public static final String TRUSTED_PROXIES;
+
+    /** 单个用户可上传的图片总字节上限（默认 200MB），防止灌满磁盘 */
+    public static final long MAX_IMAGE_BYTES_PER_USER;
+
+    /** 单个用户可上传的图片条数上限（默认 300） */
+    public static final int MAX_IMAGE_COUNT_PER_USER;
+
+    /** SSE 连接空闲多久后自动断开（毫秒，默认 10 分钟），防止挂死的长连接长期占用名额 */
+    public static final long SSE_IDLE_TIMEOUT_MS;
+
+    /** 启动完成后是否自动打开浏览器（默认开） */
+    public static final boolean AUTO_OPEN_BROWSER;
+
+    /** 自动打开的目标路径，例如 /chat 或 /posts */
+    public static final String AUTO_OPEN_PATH;
+
     /** 服务器只绑定 127.0.0.1，外网通过 ngrok 转发访问 */
     public static final String BIND_ADDRESS = "127.0.0.1";
 
@@ -81,5 +99,19 @@ public class Config {
         ADMIN_PASSWORD = props.getProperty("admin.password", "admin123");
 
         SESSION_TTL_DAYS = Integer.parseInt(props.getProperty("session.ttl.days", "30"));
+
+        TRUSTED_PROXIES = props.getProperty("trusted.proxies", "127.0.0.1,::1");
+
+        MAX_IMAGE_BYTES_PER_USER = Long.parseLong(
+                props.getProperty("max.image.bytes.per.user", String.valueOf(200L * 1024 * 1024)));
+        MAX_IMAGE_COUNT_PER_USER = Integer.parseInt(
+                props.getProperty("max.image.count.per.user", "300"));
+
+        SSE_IDLE_TIMEOUT_MS = Long.parseLong(
+                props.getProperty("sse.idle.timeout.ms", String.valueOf(10L * 60 * 1000)));
+
+        AUTO_OPEN_BROWSER = Boolean.parseBoolean(props.getProperty("auto.open.browser", "true"));
+        // 默认落在登录页；改成 /chat 或 /posts 可以直接进聊天室或论坛
+        AUTO_OPEN_PATH = props.getProperty("auto.open.path", "/login");
     }
 }

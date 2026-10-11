@@ -24,7 +24,7 @@ public class WebPages {
           .my-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
           #main { flex: 1; overflow: hidden; position: relative; display: flex; }
-          #chat-box { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; position: relative; }
+          #chat-box { flex: 1; overflow-y: auto; padding: 15px 15px 80px 15px; display: flex; flex-direction: column; position: relative; }
           #loading-tip { text-align: center; color: #999; font-size: 12px; padding: 8px; display: none; }
           #loading-tip.show { display: block; }
 
@@ -85,6 +85,279 @@ public class WebPages {
           .mention-item:hover, .mention-item.active { background: #f0f9f4; }
           .mention-item .avatar { width: 24px; height: 24px; border-radius: 50%; background: #07c160; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; }
           .mention-item .avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+          /* ===== 右侧中部悬浮按钮组 ===== */
+          #float-buttons {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 30;
+            /* 鼠标不在上面时淡化，移上去恢复清晰 */
+            opacity: 0.22;
+            transition: opacity 0.2s ease;
+          }
+          #float-buttons:hover,
+          #float-buttons:focus-within {
+            opacity: 1;
+          }
+          #float-buttons button {
+            position: relative;
+            width: 44px; height: 44px;
+            border-radius: 50%;
+            border: none;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            cursor: pointer;
+            font-size: 18px;
+            color: #666;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.15s;
+          }
+          #float-buttons button:hover { background: #f0f0f0; transform: scale(1.05); }
+          #float-buttons button.active { background: #07c160; color: #fff; }
+          #float-buttons button .badge {
+            position: absolute;
+            top: -4px; right: -4px;
+            background: #ff5757; color: #fff;
+            border-radius: 10px; padding: 1px 6px;
+            font-size: 10px; line-height: 1.4;
+          }
+
+          /* ===== 筛选面板 ===== */
+          #filter-mask { position: absolute; inset: 0; display: none; z-index: 35; }
+          #filter-mask.show { display: block; }
+
+          #filter-panel {
+            position: absolute;
+            right: 70px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 300px;
+            max-height: 72vh;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+            display: none;
+            flex-direction: column;
+            z-index: 40;
+          }
+          #filter-panel.show { display: flex; }
+          .filter-header {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #f0f0f0;
+            font-weight: bold;
+            font-size: 14px;
+            flex-shrink: 0;
+          }
+          .filter-header .filter-close {
+            background: none; border: none;
+            font-size: 20px; line-height: 1;
+            color: #999; cursor: pointer;
+            padding: 0 4px;
+          }
+          .filter-header .filter-close:hover { color: #333; }
+
+          .filter-body { flex: 1; padding: 8px 0; }
+          .filter-section { padding: 10px 16px; border-bottom: 1px solid #f7f7f7; }
+          .filter-section:last-child { border-bottom: none; }
+          .filter-section .filter-title {
+            font-size: 12px; color: #999;
+            margin-bottom: 8px;
+            display: flex; align-items: center; justify-content: space-between;
+          }
+          .filter-section .filter-title .clear-btn {
+            font-size: 11px; color: #07c160; cursor: pointer;
+            background: none; border: none; padding: 0;
+          }
+          .filter-section .filter-title .clear-btn:hover { text-decoration: underline; }
+
+          .filter-options { display: flex; flex-wrap: wrap; gap: 6px; }
+          .filter-options label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border: 1px solid #e0e0e0;
+            border-radius: 14px;
+            font-size: 12px;
+            color: #555;
+            cursor: pointer;
+            background: #fafafa;
+            transition: all 0.15s;
+            user-select: none;
+          }
+          .filter-options label:hover { border-color: #07c160; color: #07c160; }
+          .filter-options label input[type="checkbox"] {
+            display: none;
+          }
+          .filter-options label.checked {
+            background: #07c160; color: #fff; border-color: #07c160;
+          }
+
+          .filter-actions {
+            padding: 10px 16px;
+            display: flex;
+            gap: 8px;
+            border-top: 1px solid #f0f0f0;
+            flex-shrink: 0;
+          }
+          .filter-actions button {
+            flex: 1;
+            padding: 8px;
+            font-size: 13px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-family: inherit;
+          }
+          .filter-actions .reset { background: #f0f0f0; color: #333; }
+          .filter-actions .reset:hover { background: #e0e0e0; }
+
+          /* ===== 用户搜索 ===== */
+          .user-search-wrap { position: relative; }
+          .user-search-wrap input {
+            width: 100%;
+            padding: 8px 10px;
+            font-size: 13px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            outline: none;
+            font-family: inherit;
+          }
+          .user-search-wrap input:focus { border-color: #07c160; }
+
+          #user-search-dropdown {
+            position: absolute;
+            left: 0; right: 0;
+            top: 100%;
+            margin-top: 4px;
+            background: #fff;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+            max-height: 180px;
+            overflow-y: auto;
+            display: none;
+            z-index: 100;
+          }
+          #user-search-dropdown.show { display: block; }
+          .user-search-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 10px; cursor: pointer; font-size: 13px;
+          }
+          .user-search-item:hover { background: #f0f9f4; }
+          .user-search-item .avatar {
+            width: 22px; height: 22px; border-radius: 50%;
+            background: #07c160; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 10px; font-weight: bold; overflow: hidden; flex-shrink: 0;
+          }
+          .user-search-item .avatar img { width: 100%; height: 100%; object-fit: cover; }
+          .user-search-item .nick {
+            flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          }
+          .user-search-item .uname { font-size: 11px; color: #999; }
+          .user-search-empty {
+            padding: 10px; font-size: 12px; color: #999; text-align: center;
+          }
+
+          /* ===== 日期按钮 ===== */
+          .date-picker-btn {
+            width: 100%;
+            padding: 9px 12px;
+            font-size: 13px;
+            font-family: inherit;
+            background: #fafafa;
+            color: #333;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            transition: all 0.15s;
+          }
+          .date-picker-btn:hover { border-color: #07c160; color: #07c160; background: #f0f9f4; }
+
+          /* ===== 日历弹窗 ===== */
+          .calendar-mask {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: none;
+            align-items: center; justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+          }
+          .calendar-mask.show { display: flex; }
+          .calendar {
+            background: #fff;
+            border-radius: 14px;
+            padding: 18px;
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+          }
+          .calendar-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+          }
+          .calendar-header button {
+            background: none; border: none; cursor: pointer;
+            font-size: 18px; color: #666; padding: 4px 10px;
+            border-radius: 6px; font-family: inherit;
+          }
+          .calendar-header button:hover { background: #f0f0f0; }
+          .calendar-header #cal-title { font-size: 15px; font-weight: 500; color: #333; }
+          .calendar-weekdays {
+            display: grid; grid-template-columns: repeat(7, 1fr);
+            text-align: center; font-size: 12px; color: #999;
+            margin-bottom: 6px;
+          }
+          .calendar-days {
+            display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
+          }
+          .cal-day {
+            aspect-ratio: 1;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 13px;
+            border-radius: 8px;
+            color: #ddd;
+          }
+          .cal-day.has-data {
+            color: #333; cursor: pointer;
+            background: #f0f9f4; font-weight: 500;
+          }
+          .cal-day.has-data:hover { background: #07c160; color: #fff; }
+          .calendar-footer {
+            margin-top: 12px; display: flex; justify-content: flex-end;
+          }
+          .calendar-footer button {
+            padding: 7px 18px; font-size: 13px;
+            border: none; border-radius: 6px;
+            background: #f0f0f0; color: #333;
+            cursor: pointer; font-family: inherit;
+          }
+          .calendar-footer button:hover { background: #e0e0e0; }
+
+          /* ===== 定位到某条消息时的高亮 ===== */
+          .msg.highlight-flash .bubble {
+            animation: flashHighlight 1.8s ease-out;
+          }
+          @keyframes flashHighlight {
+            0%   { box-shadow: 0 0 0 4px rgba(7,193,96,0.9); }
+            100% { box-shadow: 0 0 0 0 rgba(7,193,96,0); }
+          }
+
           #image-preview { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; overflow: hidden; }
           #image-preview.show { display: flex; }
           .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
@@ -119,6 +392,57 @@ public class WebPages {
             </h3>
             <div id="online-list"></div>
           </div>
+
+          <!-- 右侧中部悬浮按钮组 -->
+          <div id="float-buttons">
+            <button id="btn-top" title="回到最上方">▲</button>
+            <button id="btn-filter" title="筛选消息">☰</button>
+            <button id="btn-bottom" title="回到最下方">▼</button>
+          </div>
+
+          <!-- 筛选遮罩 + 面板 -->
+          <div id="filter-mask" onclick="closeFilter()"></div>
+          <div id="filter-panel">
+            <div class="filter-header">
+              <span>筛选消息</span>
+              <button class="filter-close" onclick="closeFilter()">×</button>
+            </div>
+            <div class="filter-body">
+              <div class="filter-section">
+                <div class="filter-title">
+                  <span>搜索用户</span>
+                  <button class="clear-btn" onclick="clearUserSearch()">清空</button>
+                </div>
+                <div class="user-search-wrap">
+                  <div id="user-search-dropdown"></div>
+                  <input type="text" id="filter-user-search" placeholder="输入昵称或账号..." autocomplete="off">
+                </div>
+              </div>
+
+              <div class="filter-section">
+                <div class="filter-title">
+                  <span>跳转到日期</span>
+                </div>
+                <button type="button" class="date-picker-btn" onclick="openCalendar()">
+                  📅 选择年月日
+                </button>
+              </div>
+
+              <div class="filter-section">
+                <div class="filter-title">
+                  <span>按类型</span>
+                  <button class="clear-btn" onclick="clearSection('filter-type-list')">清空</button>
+                </div>
+                <div class="filter-options" id="filter-type-list">
+                  <label data-value="text"><input type="checkbox">文字</label>
+                  <label data-value="image"><input type="checkbox">图片</label>
+                </div>
+              </div>
+            </div>
+            <div class="filter-actions">
+              <button class="reset" onclick="resetFilters()">重置</button>
+            </div>
+          </div>
         </div>
         <div id="input-area">
           <textarea id="input" placeholder="输入消息...（Shift + Enter 换行，Enter 发送，@ 可提醒）" autocomplete="off"></textarea>
@@ -135,6 +459,24 @@ public class WebPages {
               <a id="preview-download" href="#" download>下载图片</a>
               <button onclick="resetPreviewZoom()">重置缩放</button>
               <button onclick="closePreview()">关闭</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="calendar-mask" class="calendar-mask" onclick="closeCalendar()">
+          <div class="calendar" onclick="event.stopPropagation()">
+            <div class="calendar-header">
+              <button type="button" onclick="calPrevMonth()">‹</button>
+              <span id="cal-title"></span>
+              <button type="button" onclick="calNextMonth()">›</button>
+            </div>
+            <div class="calendar-weekdays">
+              <span>日</span><span>一</span><span>二</span><span>三</span>
+              <span>四</span><span>五</span><span>六</span>
+            </div>
+            <div class="calendar-days" id="cal-days"></div>
+            <div class="calendar-footer">
+              <button type="button" onclick="closeCalendar()">关闭</button>
             </div>
           </div>
         </div>
@@ -162,6 +504,9 @@ public class WebPages {
         var sidebar = document.getElementById('sidebar');
         var sidebarMask = document.getElementById('sidebar-mask');
         var onlineBtn = document.getElementById('online-btn');
+        var filterPanel = document.getElementById('filter-panel');
+        var filterMask = document.getElementById('filter-mask');
+        var btnFilter = document.getElementById('btn-filter');
 
         var sending = false;
         var unreadCount = 0;
@@ -172,10 +517,21 @@ public class WebPages {
         var onlineUsers = [];
         var historyLoaded = false;
         var lastOnlineSignature = '';
+        var filterActive = false;
+
+        function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+        function messageDate(data) {
+          var t = (typeof data.createdAt === 'number' && isFinite(data.createdAt) && data.createdAt > 0)
+              ? data.createdAt
+              : Date.now();
+          var d = new Date(t);
+          return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+        }
 
         function formatTimeNow() {
           var d = new Date();
-          return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+          return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
         }
         function autoResizeInput() {
           input.style.height = 'auto';
@@ -284,7 +640,6 @@ public class WebPages {
             return;
           }
 
-          // 在线列表变化（服务器推送）
           if (data.type === 'online_list') {
             onlineUsers = data.users || [];
             renderOnlineUsers(onlineUsers);
@@ -320,11 +675,20 @@ public class WebPages {
           }
         };
 
+        // ==================== 消息渲染 ====================
         function appendMessage(data, prepend) {
           var isSelf = data.username === MY_USERNAME;
           var div = document.createElement('div');
           div.className = 'msg ' + (isSelf ? 'self' : 'other');
           if (data.id != null) div.dataset.id = data.id;
+
+          // 筛选属性
+          div.dataset.username = data.username || '';
+          div.dataset.nickname = data.nickname || data.username || '';
+          div.dataset.type = data.type || 'text';
+          div.dataset.time = data.time || '';
+          div.dataset.avatar = data.avatarId || '';
+          div.dataset.date = messageDate(data);
 
           var mentioned = !isSelf && isMentionedBy(data.text);
           if (mentioned) div.classList.add('mention');
@@ -388,6 +752,8 @@ public class WebPages {
           if (data.id != null) {
             if (oldestId == null || data.id < oldestId) oldestId = data.id;
           }
+
+          if (filterActive) applyFiltersToElement(div);
         }
 
         function updateOldestId() {
@@ -445,13 +811,23 @@ public class WebPages {
           } catch (e) { alert('网络错误'); }
         }
 
-        // ==================== 在线用户渲染（由 SSE 事件驱动） ====================
+        // ==================== 在线用户渲染 ====================
         function renderOnlineUsers(users) {
+          // 兜底：如果服务端返回的在线列表里没有自己，手动补一条
+          if (MY_USERNAME) {
+            var hasSelf = false;
+            for (var k = 0; k < users.length; k++) {
+              if (users[k].username === MY_USERNAME) { hasSelf = true; break; }
+            }
+            if (!hasSelf) {
+              users = users.concat([{
+                username: MY_USERNAME,
+                nickname: MY_NICKNAME,
+                avatarId: MY_AVATAR || null
+              }]);
+            }
+          }
           document.getElementById('online-count').textContent = users.length;
-
-          var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || '') + ':' + (u.nickname || ''); }).join('|');
-          if (sig === lastOnlineSignature) return;
-          lastOnlineSignature = sig;
 
           var list = document.getElementById('online-list');
           list.innerHTML = '';
@@ -482,6 +858,398 @@ public class WebPages {
             div.appendChild(dot); div.appendChild(av); div.appendChild(name);
             list.appendChild(div);
           }
+        }
+
+        // ==================== 悬浮按钮 ====================
+        document.getElementById('btn-top').onclick = function () {
+          chatBox.scrollTo({ top: 0, behavior: 'smooth' });
+        };
+        document.getElementById('btn-bottom').onclick = function () {
+          chatBox.scrollTo({ top: chatBox.scrollHeight, behavior: 'smooth' });
+        };
+        btnFilter.onclick = function () {
+          if (filterPanel.classList.contains('show')) closeFilter();
+          else openFilter();
+        };
+
+        // 悬浮按钮的淡化/恢复完全由 CSS 的 :hover / :focus-within 控制，无需 JS。
+        // 容器默认 opacity 0.22，鼠标移上去变 1，因此不占视觉但始终可点。
+
+        // ==================== 筛选面板 ====================
+        var userSearchInput = document.getElementById('filter-user-search');
+        var userSearchDropdown = document.getElementById('user-search-dropdown');
+        var selectedUserFilter = null;
+        var allFilterUsers = [];
+        var userSearchMatches = [];
+        // 服务端返回的完整用户目录，用于「搜索用户」下拉
+        var userDirectory = [];
+
+        function openFilter() {
+          rebuildFilterUsers();
+          filterPanel.classList.add('show');
+          filterMask.classList.add('show');
+          btnFilter.classList.add('active');
+        }
+
+        function closeFilter() {
+          filterPanel.classList.remove('show');
+          filterMask.classList.remove('show');
+          btnFilter.classList.remove('active');
+          hideUserSearchDropdown();
+        }
+
+        /**
+         * 收集候选用户。
+         *
+         * 优先用服务端返回的完整用户目录——只从「已加载的消息」里收集的话，
+         * 刷新后只有最近 30 条，没在这个范围里发过言的人就永远搜不到。
+         * 目录拿不到时退回原来的 DOM 收集方式。
+         */
+        function rebuildFilterUsers() {
+          var map = {};
+
+          if (userDirectory && userDirectory.length) {
+            for (var d = 0; d < userDirectory.length; d++) {
+              var du = userDirectory[d];
+              if (!du || !du.username) continue;
+              map[du.username] = {
+                username: du.username,
+                nickname: du.nickname || du.username,
+                avatarId: du.avatarId || ''
+              };
+            }
+          }
+
+          // 已加载消息里出现过的人一并纳入，兼容目录请求失败的情况
+          var msgs = chatBox.querySelectorAll('.msg');
+          for (var i = 0; i < msgs.length; i++) {
+            var m = msgs[i];
+            var uname = m.getAttribute('data-username');
+            if (!uname || map[uname]) continue;
+            map[uname] = {
+              username: uname,
+              nickname: m.getAttribute('data-nickname') || uname,
+              avatarId: m.getAttribute('data-avatar') || ''
+            };
+          }
+
+          var arr = [];
+          for (var k in map) {
+            if (Object.prototype.hasOwnProperty.call(map, k)) arr.push(map[k]);
+          }
+          arr.sort(function (a, b) {
+            return (a.nickname || '').localeCompare(b.nickname || '');
+          });
+          allFilterUsers = arr;
+        }
+
+        // 页面加载后拉一次完整用户目录，让搜索不依赖消息加载进度
+        function loadUserDirectory() {
+          fetch('/users?token=' + encodeURIComponent(TOKEN))
+            .then(function (res) { return res.json(); })
+            .then(function (r) {
+              if (r && r.ok && r.users) {
+                userDirectory = r.users;
+                allFilterUsers = [];
+              }
+            })
+            .catch(function () {});
+        }
+        loadUserDirectory();
+        
+        function renderUserSearchDropdown(users) {
+          userSearchMatches = users;
+          userSearchDropdown.innerHTML = '';
+          if (users.length === 0) {
+            var empty = document.createElement('div');
+            empty.className = 'user-search-empty';
+            empty.textContent = '没有匹配的用户';
+            userSearchDropdown.appendChild(empty);
+            userSearchDropdown.classList.add('show');
+            return;
+          }
+          users.slice(0, 50).forEach(function (u) {
+            var item = document.createElement('div');
+            item.className = 'user-search-item';
+
+            var av = document.createElement('div');
+            av.className = 'avatar';
+            if (u.avatarId) {
+              var img = document.createElement('img');
+              img.src = '/image/' + u.avatarId;
+              av.appendChild(img);
+            } else {
+              av.textContent = (u.nickname || u.username).charAt(0).toUpperCase();
+            }
+
+            var nick = document.createElement('span');
+            nick.className = 'nick';
+            nick.textContent = u.nickname || u.username;
+
+            var uname = document.createElement('span');
+            uname.className = 'uname';
+            uname.textContent = u.username;
+
+            item.appendChild(av);
+            item.appendChild(nick);
+            item.appendChild(uname);
+            item.onclick = function () { selectFilterUser(u); };
+            userSearchDropdown.appendChild(item);
+          });
+          userSearchDropdown.classList.add('show');
+        }
+
+        function hideUserSearchDropdown() {
+          userSearchDropdown.classList.remove('show');
+          userSearchMatches = [];
+        }
+
+        // 点击输入框/下拉以外的地方时收起下拉。
+        // 判断用 closest('.user-search-wrap')：输入框和下拉本身都在这个容器里，
+        // 所以点输入框不会误关，点面板别处或页面任意位置都会收起。
+        document.addEventListener('click', function (e) {
+          var t = e.target;
+          if (t && t.closest && t.closest('.user-search-wrap')) return;
+          if (userSearchDropdown.classList.contains('show')) hideUserSearchDropdown();
+        });
+
+        // Esc 也能收起；焦点在输入框上时顺便清掉选中项
+        userSearchInput.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' || e.keyCode === 27) {
+            hideUserSearchDropdown();
+            userSearchInput.blur();
+          }
+        });
+
+        function selectFilterUser(u) {
+          selectedUserFilter = u.username;
+          userSearchInput.value = u.nickname || u.username;
+          hideUserSearchDropdown();
+          applyFilters();
+          updateFilterBadge();
+        }
+
+        function clearUserSearch() {
+          userSearchInput.value = '';
+          selectedUserFilter = null;
+          hideUserSearchDropdown();
+          applyFilters();
+          updateFilterBadge();
+        }
+
+        // 聚焦时总是重建候选并显示下拉，不管输入框里有没有残留内容
+        userSearchInput.addEventListener('focus', function () {
+          rebuildFilterUsers();
+          var q = userSearchInput.value.trim();
+          if (!q) {
+            renderUserSearchDropdown(allFilterUsers);
+            return;
+          }
+          var lower = q.toLowerCase();
+          var matches = allFilterUsers.filter(function (u) {
+            return (u.nickname || '').toLowerCase().indexOf(lower) >= 0
+                || u.username.toLowerCase().indexOf(lower) >= 0;
+          });
+          renderUserSearchDropdown(matches);
+        });
+
+        userSearchInput.addEventListener('input', function () {
+          selectedUserFilter = null;
+          var q = userSearchInput.value.trim();
+          if (!q) {
+            if (allFilterUsers.length === 0) rebuildFilterUsers();
+            renderUserSearchDropdown(allFilterUsers);
+            applyFilters();
+            updateFilterBadge();
+            return;
+          }
+          if (allFilterUsers.length === 0) rebuildFilterUsers();
+          var lower = q.toLowerCase();
+          var matches = allFilterUsers.filter(function (u) {
+            return (u.nickname || '').toLowerCase().indexOf(lower) >= 0
+                || u.username.toLowerCase().indexOf(lower) >= 0;
+          });
+          renderUserSearchDropdown(matches);
+          applyFilters();
+          updateFilterBadge();
+        });
+
+        function getCheckedValues(container) {
+          var arr = [];
+          container.querySelectorAll('label').forEach(function (label) {
+            var cb = label.querySelector('input[type="checkbox"]');
+            if (cb && cb.checked) arr.push(label.dataset.value);
+          });
+          return arr;
+        }
+
+        function clearSection(id) {
+          var box = document.getElementById(id);
+          box.querySelectorAll('label').forEach(function (label) {
+            var cb = label.querySelector('input[type="checkbox"]');
+            if (cb) cb.checked = false;
+            label.classList.remove('checked');
+          });
+          applyFilters();
+          updateFilterBadge();
+        }
+
+        function resetFilters() {
+          clearSection('filter-type-list');
+          clearUserSearch();
+          closeFilter();
+        }
+
+        // 类型标签点击
+        document.querySelectorAll('#filter-type-list label').forEach(function (label) {
+          label.onclick = function (e) {
+            e.preventDefault();
+            var cb = label.querySelector('input[type="checkbox"]');
+            cb.checked = !cb.checked;
+            if (cb.checked) label.classList.add('checked');
+            else label.classList.remove('checked');
+            applyFilters();
+            updateFilterBadge();
+          };
+        });
+
+        function matchMessage(msg) {
+          var typeFilter = getCheckedValues(document.getElementById('filter-type-list'));
+          var q = userSearchInput.value.trim();
+          var hasUserFilter = (selectedUserFilter !== null) || (q.length > 0);
+
+          if (typeFilter.length === 0 && !hasUserFilter) return true;
+
+          if (typeFilter.length > 0 && typeFilter.indexOf(msg.dataset.type) < 0) return false;
+
+          if (hasUserFilter) {
+            if (selectedUserFilter !== null) {
+              if (msg.dataset.username !== selectedUserFilter) return false;
+            } else {
+              var lower = q.toLowerCase();
+              var nick = (msg.dataset.nickname || '').toLowerCase();
+              var uname = (msg.dataset.username || '').toLowerCase();
+              if (nick.indexOf(lower) < 0 && uname.indexOf(lower) < 0) return false;
+            }
+          }
+          return true;
+        }
+
+        function applyFiltersToElement(msg) {
+          if (matchMessage(msg)) msg.style.display = '';
+          else msg.style.display = 'none';
+        }
+
+        function applyFilters() {
+          var typeFilter = getCheckedValues(document.getElementById('filter-type-list'));
+          var q = userSearchInput.value.trim();
+          var anyFilter = typeFilter.length > 0 || q.length > 0 || selectedUserFilter !== null;
+          filterActive = anyFilter;
+
+          chatBox.querySelectorAll('.msg').forEach(function (msg) {
+            if (anyFilter) applyFiltersToElement(msg);
+            else msg.style.display = '';
+          });
+        }
+
+        function updateFilterBadge() {
+          var n = getCheckedValues(document.getElementById('filter-type-list')).length;
+          if (selectedUserFilter !== null || userSearchInput.value.trim().length > 0) n++;
+
+          var oldBadge = btnFilter.querySelector('.badge');
+          if (oldBadge) oldBadge.remove();
+          if (n > 0) {
+            var badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = n;
+            btnFilter.appendChild(badge);
+          }
+        }
+
+        // ==================== 日历 ====================
+        var calYear = 0;
+        var calMonth = 0;   // 0-11
+
+        function openCalendar() {
+          var now = new Date();
+          calYear = now.getFullYear();
+          calMonth = now.getMonth();
+          renderCalendar();
+          document.getElementById('calendar-mask').classList.add('show');
+        }
+
+        function closeCalendar() {
+          document.getElementById('calendar-mask').classList.remove('show');
+        }
+
+        function calPrevMonth() {
+          calMonth--;
+          if (calMonth < 0) { calMonth = 11; calYear--; }
+          renderCalendar();
+        }
+
+        function calNextMonth() {
+          calMonth++;
+          if (calMonth > 11) { calMonth = 0; calYear++; }
+          renderCalendar();
+        }
+
+        function renderCalendar() {
+          document.getElementById('cal-title').textContent = calYear + '年' + (calMonth + 1) + '月';
+          var daysBox = document.getElementById('cal-days');
+          daysBox.innerHTML = '';
+
+          // 收集当前已渲染消息里出现过的日期
+          var available = {};
+          chatBox.querySelectorAll('.msg').forEach(function (m) {
+            if (m.dataset.date) available[m.dataset.date] = true;
+          });
+
+          var firstDay = new Date(calYear, calMonth, 1).getDay();
+          var daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+
+          for (var i = 0; i < firstDay; i++) {
+            var blank = document.createElement('div');
+            blank.className = 'cal-day';
+            daysBox.appendChild(blank);
+          }
+
+          for (var d = 1; d <= daysInMonth; d++) {
+            var dateStr = calYear + '-' + pad2(calMonth + 1) + '-' + pad2(d);
+            var el = document.createElement('div');
+            el.className = 'cal-day';
+            el.textContent = d;
+            if (available[dateStr]) {
+              el.classList.add('has-data');
+              (function (ds) {
+                el.onclick = function () { jumpToDate(ds); };
+              })(dateStr);
+            }
+            daysBox.appendChild(el);
+          }
+        }
+
+        function jumpToDate(dateStr) {
+          closeCalendar();
+          closeFilter();
+
+          chatBox.querySelectorAll('.msg').forEach(function (m) { m.style.display = ''; });
+          filterActive = false;
+
+          var target = null;
+          var msgs = chatBox.querySelectorAll('.msg');
+          for (var i = 0; i < msgs.length; i++) {
+            if (msgs[i].dataset.date === dateStr) { target = msgs[i]; break; }
+          }
+          if (!target) {
+            alert('没有找到 ' + dateStr + ' 的消息（更早的历史可能还没加载，请先往上滚动加载更多）');
+            return;
+          }
+
+          chatBox.scrollTop = Math.max(0, target.offsetTop - chatBox.clientHeight / 3);
+
+          target.classList.add('highlight-flash');
+          setTimeout(function () { target.classList.remove('highlight-flash'); }, 1800);
         }
 
         // ==================== @ 下拉 ====================
@@ -614,14 +1382,11 @@ public class WebPages {
           var vw = window.innerWidth;
           var vh = window.innerHeight;
           var margin = 80;
-
           var dx = 0, dy = 0;
-
           if (rect.right < margin) dx = margin - rect.right;
           if (rect.left > vw - margin) dx = (vw - margin) - rect.left;
           if (rect.bottom < margin) dy = margin - rect.bottom;
           if (rect.top > vh - margin) dy = (vh - margin) - rect.top;
-
           if (dx !== 0 || dy !== 0) {
             previewX += dx;
             previewY += dy;
@@ -786,7 +1551,13 @@ public class WebPages {
         });
 
         document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape') { closePreview(); hideMentionDropdown(); toggleSidebar(false); }
+          if (e.key === 'Escape') {
+            closePreview();
+            hideMentionDropdown();
+            toggleSidebar(false);
+            closeFilter();
+            closeCalendar();
+          }
         });
 
         sendBtn.onclick = sendText;

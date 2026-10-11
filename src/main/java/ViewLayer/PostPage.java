@@ -33,6 +33,8 @@ public class PostPage {
           .post-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
           .post-card h2 { font-size: 17px; color: #222; margin-bottom: 8px; }
           .post-card .excerpt { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 10px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+          .post-card .thumb-strip { display: flex; gap: 6px; margin-bottom: 10px; }
+          .post-card .thumb-strip img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; cursor: zoom-in; }
           .post-card .meta { font-size: 12px; color: #999; display: flex; gap: 12px; }
           .empty { text-align: center; color: #999; padding: 40px; }
 
@@ -77,6 +79,40 @@ public class PostPage {
           .msg { padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: none; }
           .msg.show { display: block; }
           .msg.error { background: #fee; color: #c33; }
+
+          .image-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+          .image-item { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; }
+          .image-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+          .image-item .remove-btn {
+            position: absolute; top: 2px; right: 2px;
+            width: 18px; height: 18px; line-height: 1;
+            background: rgba(0,0,0,0.6); color: #fff;
+            border: none; border-radius: 50%; cursor: pointer; font-size: 12px; padding: 0;
+          }
+          .add-image-btn {
+            width: 80px; height: 80px; border: 1px dashed #ddd; background: #fafafa;
+            border-radius: 6px; cursor: pointer; font-size: 24px; color: #999; font-family: inherit;
+          }
+          .add-image-btn:hover { background: #f0f0f0; color: #666; }
+
+          /* 图片预览：支持滚轮缩放、拖动、防离开屏幕 */
+          #image-preview {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+            display: none; align-items: center; justify-content: center;
+            z-index: 999; padding: 20px; overflow: hidden;
+          }
+          #image-preview.show { display: flex; }
+          .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
+          .preview-content img {
+            max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px;
+            cursor: grab; user-select: none; -webkit-user-drag: none;
+          }
+          .preview-content img.dragging { cursor: grabbing; }
+          .preview-content img.smooth { transition: transform 0.1s ease-out; }
+          .preview-actions { display: flex; gap: 12px; }
+          .preview-actions a, .preview-actions button { padding: 9px 24px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; text-decoration: none; font-family: inherit; line-height: 1.2; }
+          .preview-actions a { background: #07c160; color: #fff; }
+          .preview-actions button { background: #fff; color: #333; }
         </style></head><body>
         <div id="header">
           <span class="title">519SB 帖子</span>
@@ -107,9 +143,23 @@ public class PostPage {
             <div id="edit-msg" class="msg"></div>
             <input type="text" id="edit-title" placeholder="标题" maxlength="100">
             <textarea id="edit-content" placeholder="正文内容..."></textarea>
+            <div class="image-list" id="edit-image-list"></div>
+            <input type="file" id="edit-image-input" accept="image/*" multiple style="display: none;">
+            <button type="button" class="add-image-btn" onclick="document.getElementById('edit-image-input').click()">+</button>
             <div class="modal-actions">
               <button class="cancel" onclick="closeEdit()">取消</button>
               <button class="save" onclick="savePost()">发布</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="image-preview" onclick="onPreviewMaskClick(event)">
+          <div class="preview-content">
+            <img id="preview-img" src="" alt="" draggable="false" onwheel="onPreviewWheel(event)">
+            <div class="preview-actions">
+              <a id="preview-download" href="#" download>下载图片</a>
+              <button onclick="resetPreviewZoom()">重置缩放</button>
+              <button onclick="closePreview()">关闭</button>
             </div>
           </div>
         </div>
@@ -125,6 +175,7 @@ public class PostPage {
         var sidebar = document.getElementById('sidebar');
         var sidebarMask = document.getElementById('sidebar-mask');
         var onlineBtn = document.getElementById('online-btn');
+        var editImages = [];
 
         document.getElementById('my-nickname').textContent = MY_NICKNAME;
         if (IS_ADMIN) {
@@ -154,6 +205,18 @@ public class PostPage {
           });
         }
 
+        function getImageIds(images) {
+          if (!images) return [];
+          if (Array.isArray(images)) return images.slice();
+          if (typeof images === 'string') {
+            try {
+              var arr = JSON.parse(images);
+              return Array.isArray(arr) ? arr : [];
+            } catch (e) { return []; }
+          }
+          return [];
+        }
+
         // ==================== 侧边栏 ====================
         function toggleSidebar(show) {
           if (typeof show === 'undefined') show = !sidebar.classList.contains('show');
@@ -171,7 +234,6 @@ public class PostPage {
 
         function renderOnlineUsers(users) {
           document.getElementById('online-count').textContent = users.length;
-
           var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || '') + ':' + (u.nickname || ''); }).join('|');
           if (sig === lastOnlineSignature) return;
           lastOnlineSignature = sig;
@@ -207,29 +269,67 @@ public class PostPage {
           }
         }
 
-        // ==================== 打开 SSE 长连接（用于在线列表推送 + 保持在线状态） ====================
+        // ==================== SSE ====================
         var es = new EventSource('/events?token=' + encodeURIComponent(TOKEN));
         es.onmessage = function (e) {
           if (!e || !e.data || typeof e.data !== 'string') return;
           var raw = e.data.trim();
           if (raw.length === 0) return;
-
           var data;
           try { data = JSON.parse(raw); } catch (err) { return; }
 
-          // 只处理：在线列表变化、被踢
-          if (data.type === 'online_list') {
-            renderOnlineUsers(data.users || []);
-            return;
-          }
+          if (data.type === 'online_list') { renderOnlineUsers(data.users || []); return; }
           if (data.type === 'kick') {
             alert(data.reason || '你已被管理员踢出');
             localStorage.clear();
             location.href = '/login';
             return;
           }
-          // 其他事件（消息、撤回等）在帖子页不处理
         };
+
+        // ==================== 图片上传 ====================
+        document.getElementById('edit-image-input').onchange = async (e) => {
+          var files = Array.from(e.target.files);
+          for (var i = 0; i < files.length; i++) {
+            if (editImages.length >= 9) { alert('最多 9 张图片'); break; }
+            await uploadOne(files[i]);
+          }
+          e.target.value = '';
+          renderEditImages();
+        };
+
+        function uploadOne(file) {
+          return new Promise((resolve) => {
+            compressImage(file, 1200, async (base64) => {
+              try {
+                var res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=post',
+                    { method: 'POST', body: base64 });
+                if (!res.ok) { alert('图片上传失败：' + res.status); resolve(); return; }
+                var id = (await res.text()).trim();
+                editImages.push(id);
+              } catch (err) { alert('上传失败：' + err.message); }
+              resolve();
+            });
+          });
+        }
+
+        function renderEditImages() {
+          var box = document.getElementById('edit-image-list');
+          box.innerHTML = '';
+          editImages.forEach((id, idx) => {
+            var item = document.createElement('div');
+            item.className = 'image-item';
+            var img = document.createElement('img');
+            img.src = '/image/' + id;
+            var rm = document.createElement('button');
+            rm.className = 'remove-btn';
+            rm.textContent = '×';
+            rm.onclick = () => { editImages.splice(idx, 1); renderEditImages(); };
+            item.appendChild(img);
+            item.appendChild(rm);
+            box.appendChild(item);
+          });
+        }
 
         // ==================== 帖子列表 ====================
         function fmtTime(ms) {
@@ -272,16 +372,31 @@ public class PostPage {
             ex.className = 'excerpt';
             ex.textContent = p.content.length > 100 ? p.content.substring(0, 100) + '...' : p.content;
 
+            const ids = getImageIds(p.images);
+            let thumbs = null;
+            if (ids.length > 0) {
+              thumbs = document.createElement('div');
+              thumbs.className = 'thumb-strip';
+              ids.slice(0, 3).forEach(id => {
+                const img = document.createElement('img');
+                img.src = '/image/' + id;
+                img.onclick = (e) => { e.stopPropagation(); openPreview(id); };
+                thumbs.appendChild(img);
+              });
+            }
+
             const meta = document.createElement('div');
             meta.className = 'meta';
             const a = document.createElement('span');
             a.textContent = 'by ' + (p.authorNickname || p.author);
             const t = document.createElement('span'); t.textContent = fmtTime(p.createdAt);
             const v = document.createElement('span'); v.textContent = p.views + ' 阅读';
-            meta.appendChild(a); meta.appendChild(t); meta.appendChild(v);
+            const l = document.createElement('span'); l.textContent = '❤ ' + (p.likeCount || 0);
+            meta.appendChild(a); meta.appendChild(t); meta.appendChild(v); meta.appendChild(l);
 
             card.appendChild(h2);
             card.appendChild(ex);
+            if (thumbs) card.appendChild(thumbs);
             card.appendChild(meta);
             card.onclick = () => location.href = '/posts/' + p.id;
             box.appendChild(card);
@@ -289,6 +404,8 @@ public class PostPage {
         }
 
         function openEdit() {
+          editImages = [];
+          renderEditImages();
           document.getElementById('edit-title').value = '';
           document.getElementById('edit-content').value = '';
           document.getElementById('edit-msg').className = 'msg';
@@ -313,7 +430,7 @@ public class PostPage {
             const res = await fetch('/api/posts?token=' + encodeURIComponent(TOKEN), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ title, content })
+              body: JSON.stringify({ title, content, images: editImages })
             });
             const r = await res.json();
             if (r.ok) {
@@ -327,8 +444,148 @@ public class PostPage {
           }
         }
 
-        document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape') toggleSidebar(false);
+        // ==================== 图片预览（缩放 + 拖动 + 防离开屏幕） ====================
+        var previewScale = 1;
+        var previewMinScale = 0.2;
+        var previewMaxScale = 8;
+        var previewX = 0;
+        var previewY = 0;
+        var dragging = false;
+        var dragStartX = 0;
+        var dragStartY = 0;
+        var dragOffsetX = 0;
+        var dragOffsetY = 0;
+
+        function applyPreviewTransform(smooth) {
+          var img = document.getElementById('preview-img');
+          if (smooth) img.classList.add('smooth');
+          else img.classList.remove('smooth');
+          img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+        }
+
+        function openPreview(id) {
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
+          var img = document.getElementById('preview-img');
+          img.src = '/image/' + id;
+          img.classList.remove('dragging');
+          applyPreviewTransform(false);
+          var dl = document.getElementById('preview-download');
+          dl.href = '/image/' + id + '?download=1';
+          dl.setAttribute('download', 'image_' + id + '.jpg');
+          document.getElementById('image-preview').classList.add('show');
+        }
+
+        function closePreview() {
+          document.getElementById('image-preview').classList.remove('show');
+          var img = document.getElementById('preview-img');
+          img.src = '';
+          img.classList.remove('dragging');
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
+        }
+
+        function resetPreviewZoom() {
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          applyPreviewTransform(true);
+        }
+
+        function clampPreviewPosition() {
+          var img = document.getElementById('preview-img');
+          if (!img.src) return;
+          var rect = img.getBoundingClientRect();
+          var vw = window.innerWidth;
+          var vh = window.innerHeight;
+          var margin = 80;
+          var dx = 0, dy = 0;
+          if (rect.right < margin) dx = margin - rect.right;
+          if (rect.left > vw - margin) dx = (vw - margin) - rect.left;
+          if (rect.bottom < margin) dy = margin - rect.bottom;
+          if (rect.top > vh - margin) dy = (vh - margin) - rect.top;
+          if (dx !== 0 || dy !== 0) {
+            previewX += dx;
+            previewY += dy;
+            img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+          }
+        }
+
+        function onPreviewWheel(e) {
+          e.preventDefault();
+          var delta = -e.deltaY * 0.002;
+          previewScale = previewScale * (1 + delta);
+          if (previewScale < previewMinScale) previewScale = previewMinScale;
+          if (previewScale > previewMaxScale) previewScale = previewMaxScale;
+          applyPreviewTransform(true);
+          setTimeout(clampPreviewPosition, 120);
+        }
+
+        function onPreviewMouseDown(e) {
+          if (e.button !== 0) return;
+          dragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragOffsetX = previewX;
+          dragOffsetY = previewY;
+          document.getElementById('preview-img').classList.add('dragging');
+          e.preventDefault();
+        }
+
+        function onPreviewMouseMove(e) {
+          if (!dragging) return;
+          previewX = dragOffsetX + (e.clientX - dragStartX);
+          previewY = dragOffsetY + (e.clientY - dragStartY);
+          applyPreviewTransform(false);
+        }
+
+        function onPreviewMouseUp(e) {
+          if (!dragging) return;
+          dragging = false;
+          document.getElementById('preview-img').classList.remove('dragging');
+          clampPreviewPosition();
+        }
+
+        function onPreviewMaskClick(e) {
+          if (e.target.id === 'image-preview') closePreview();
+        }
+
+        (function() {
+          var img = document.getElementById('preview-img');
+          img.addEventListener('dblclick', resetPreviewZoom);
+          img.addEventListener('mousedown', onPreviewMouseDown);
+          document.addEventListener('mousemove', onPreviewMouseMove);
+          document.addEventListener('mouseup', onPreviewMouseUp);
+        })();
+
+        // ==================== 工具 ====================
+        function compressImage(file, maxWidth, callback) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let width = img.width, height = img.height;
+              if (width > maxWidth) {
+                height = Math.round(height * maxWidth / width);
+                width = maxWidth;
+              }
+              canvas.width = width;
+              canvas.height = height;
+              canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+              callback(canvas.toDataURL('image/jpeg', 0.85));
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') { closePreview(); toggleSidebar(false); closeEdit(); }
         });
 
         document.getElementById('new-btn').onclick = openEdit;
@@ -364,6 +621,12 @@ public class PostPage {
           .post h1 { font-size: 24px; color: #222; line-height: 1.4; margin-bottom: 12px; }
           .post .meta { font-size: 13px; color: #999; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #f0f0f0; }
           .post .content { font-size: 15px; line-height: 1.8; color: #333; white-space: pre-wrap; word-wrap: break-word; }
+          .post .images { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; }
+          .post .images img {
+            max-width: 200px; max-height: 200px; border-radius: 8px;
+            cursor: zoom-in; object-fit: cover; transition: transform 0.15s;
+          }
+          .post .images img:hover { transform: scale(1.02); }
           .actions { display: flex; gap: 8px; margin-top: 28px; padding-top: 20px; border-top: 1px solid #f0f0f0; }
           .actions button { padding: 7px 16px; font-size: 13px; border-radius: 6px; border: none; cursor: pointer; font-family: inherit; }
           .actions .btn-gray { background: #f0f0f0; color: #333; }
@@ -513,6 +776,40 @@ public class PostPage {
           .msg { padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: none; }
           .msg.show { display: block; }
           .msg.error { background: #fee; color: #c33; }
+
+          .image-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+          .image-item { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; }
+          .image-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+          .image-item .remove-btn {
+            position: absolute; top: 2px; right: 2px;
+            width: 18px; height: 18px; line-height: 1;
+            background: rgba(0,0,0,0.6); color: #fff;
+            border: none; border-radius: 50%; cursor: pointer; font-size: 12px; padding: 0;
+          }
+          .add-image-btn {
+            width: 80px; height: 80px; border: 1px dashed #ddd; background: #fafafa;
+            border-radius: 6px; cursor: pointer; font-size: 24px; color: #999; font-family: inherit;
+          }
+          .add-image-btn:hover { background: #f0f0f0; color: #666; }
+
+          /* 图片预览：支持滚轮缩放、拖动、防离开屏幕 */
+          #image-preview {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+            display: none; align-items: center; justify-content: center;
+            z-index: 999; padding: 20px; overflow: hidden;
+          }
+          #image-preview.show { display: flex; }
+          .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
+          .preview-content img {
+            max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px;
+            cursor: grab; user-select: none; -webkit-user-drag: none;
+          }
+          .preview-content img.dragging { cursor: grabbing; }
+          .preview-content img.smooth { transition: transform 0.1s ease-out; }
+          .preview-actions { display: flex; gap: 12px; }
+          .preview-actions a, .preview-actions button { padding: 9px 24px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; text-decoration: none; font-family: inherit; line-height: 1.2; }
+          .preview-actions a { background: #07c160; color: #fff; }
+          .preview-actions button { background: #fff; color: #333; }
         </style></head><body>
         <div id="header">
           <span class="title">519SB 帖子</span>
@@ -531,6 +828,7 @@ public class PostPage {
             <h1 id="post-title">加载中...</h1>
             <div class="meta" id="post-meta"></div>
             <div class="content" id="post-content"></div>
+            <div class="images" id="post-images"></div>
             <div class="actions" id="post-actions" style="display:none;">
               <button class="btn-gray" id="edit-btn">编辑</button>
               <button class="btn-red" id="del-btn">删除</button>
@@ -573,9 +871,23 @@ public class PostPage {
             <div id="edit-msg" class="msg"></div>
             <input type="text" id="edit-title" maxlength="100">
             <textarea id="edit-content"></textarea>
+            <div class="image-list" id="edit-image-list"></div>
+            <input type="file" id="edit-image-input" accept="image/*" multiple style="display: none;">
+            <button type="button" class="add-image-btn" onclick="document.getElementById('edit-image-input').click()">+</button>
             <div class="modal-actions">
               <button class="cancel" onclick="closeEdit()">取消</button>
               <button class="save" onclick="saveEdit()">保存</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="image-preview" onclick="onPreviewMaskClick(event)">
+          <div class="preview-content">
+            <img id="preview-img" src="" alt="" draggable="false" onwheel="onPreviewWheel(event)">
+            <div class="preview-actions">
+              <a id="preview-download" href="#" download>下载图片</a>
+              <button onclick="resetPreviewZoom()">重置缩放</button>
+              <button onclick="closePreview()">关闭</button>
             </div>
           </div>
         </div>
@@ -595,6 +907,7 @@ public class PostPage {
         var sidebar = document.getElementById('sidebar');
         var sidebarMask = document.getElementById('sidebar-mask');
         var onlineBtn = document.getElementById('online-btn');
+        var editImages = [];
 
         document.getElementById('my-nickname').textContent = MY_NICKNAME;
         if (IS_ADMIN) {
@@ -624,6 +937,18 @@ public class PostPage {
           });
         }
 
+        function getImageIds(images) {
+          if (!images) return [];
+          if (Array.isArray(images)) return images.slice();
+          if (typeof images === 'string') {
+            try {
+              var arr = JSON.parse(images);
+              return Array.isArray(arr) ? arr : [];
+            } catch (e) { return []; }
+          }
+          return [];
+        }
+
         // ==================== 侧边栏 ====================
         function toggleSidebar(show) {
           if (typeof show === 'undefined') show = !sidebar.classList.contains('show');
@@ -641,7 +966,6 @@ public class PostPage {
 
         function renderOnlineUsers(users) {
           document.getElementById('online-count').textContent = users.length;
-
           var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || '') + ':' + (u.nickname || ''); }).join('|');
           if (sig === lastOnlineSignature) return;
           lastOnlineSignature = sig;
@@ -683,14 +1007,10 @@ public class PostPage {
           if (!e || !e.data || typeof e.data !== 'string') return;
           var raw = e.data.trim();
           if (raw.length === 0) return;
-
           var data;
           try { data = JSON.parse(raw); } catch (err) { return; }
 
-          if (data.type === 'online_list') {
-            renderOnlineUsers(data.users || []);
-            return;
-          }
+          if (data.type === 'online_list') { renderOnlineUsers(data.users || []); return; }
           if (data.type === 'kick') {
             alert(data.reason || '你已被管理员踢出');
             localStorage.clear();
@@ -698,6 +1018,50 @@ public class PostPage {
             return;
           }
         };
+
+        // ==================== 图片上传 ====================
+        document.getElementById('edit-image-input').onchange = async (e) => {
+          var files = Array.from(e.target.files);
+          for (var i = 0; i < files.length; i++) {
+            if (editImages.length >= 9) { alert('最多 9 张图片'); break; }
+            await uploadOne(files[i]);
+          }
+          e.target.value = '';
+          renderEditImages();
+        };
+
+        function uploadOne(file) {
+          return new Promise((resolve) => {
+            compressImage(file, 1200, async (base64) => {
+              try {
+                var res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=post',
+                    { method: 'POST', body: base64 });
+                if (!res.ok) { alert('图片上传失败：' + res.status); resolve(); return; }
+                var id = (await res.text()).trim();
+                editImages.push(id);
+              } catch (err) { alert('上传失败：' + err.message); }
+              resolve();
+            });
+          });
+        }
+
+        function renderEditImages() {
+          var box = document.getElementById('edit-image-list');
+          box.innerHTML = '';
+          editImages.forEach((id, idx) => {
+            var item = document.createElement('div');
+            item.className = 'image-item';
+            var img = document.createElement('img');
+            img.src = '/image/' + id;
+            var rm = document.createElement('button');
+            rm.className = 'remove-btn';
+            rm.textContent = '×';
+            rm.onclick = () => { editImages.splice(idx, 1); renderEditImages(); };
+            item.appendChild(img);
+            item.appendChild(rm);
+            box.appendChild(item);
+          });
+        }
 
         // ==================== 帖子详情 ====================
         function fmtTime(ms) {
@@ -730,6 +1094,15 @@ public class PostPage {
           document.getElementById('post-meta').textContent =
             'by ' + (p.authorNickname || p.author) + ' · ' + fmtTime(p.createdAt) + ' · ' + p.views + ' 阅读';
           document.getElementById('post-content').textContent = p.content;
+
+          var imagesBox = document.getElementById('post-images');
+          imagesBox.innerHTML = '';
+          getImageIds(p.images).forEach(id => {
+            var img = document.createElement('img');
+            img.src = '/image/' + id;
+            img.onclick = () => openPreview(id);
+            imagesBox.appendChild(img);
+          });
 
           if (MY_USERNAME === p.author || IS_ADMIN) {
             document.getElementById('post-actions').style.display = 'flex';
@@ -897,7 +1270,7 @@ public class PostPage {
           const to = document.createElement('span');
           to.className = 'reply-to';
           const replyToNick = r.replyToNick || '';
-          if (replyToNick && replyToNick !== (r.nickname || r.username)) {
+          if (replyToNick) {
             to.appendChild(document.createTextNode('回复 '));
             const b = document.createElement('b');
             b.textContent = replyToNick;
@@ -1050,10 +1423,13 @@ public class PostPage {
           } catch (e) { alert('网络错误：' + e.message); }
         }
 
+        // ==================== 编辑帖子 ====================
         function openEdit() {
           if (!currentPost) return;
           document.getElementById('edit-title').value = currentPost.title;
           document.getElementById('edit-content').value = currentPost.content;
+          editImages = getImageIds(currentPost.images);
+          renderEditImages();
           document.getElementById('edit-msg').className = 'msg';
           document.getElementById('edit-mask').classList.add('show');
         }
@@ -1075,7 +1451,7 @@ public class PostPage {
             const res = await fetch('/api/posts/update?token=' + encodeURIComponent(TOKEN), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: POST_ID, title, content })
+              body: JSON.stringify({ id: POST_ID, title, content, images: editImages })
             });
             const r = await res.json();
             if (r.ok) { closeEdit(); loadPost(); }
@@ -1097,8 +1473,148 @@ public class PostPage {
           } catch (e) { alert('网络错误：' + e.message); }
         }
 
+        // ==================== 图片预览（缩放 + 拖动 + 防离开屏幕） ====================
+        var previewScale = 1;
+        var previewMinScale = 0.2;
+        var previewMaxScale = 8;
+        var previewX = 0;
+        var previewY = 0;
+        var dragging = false;
+        var dragStartX = 0;
+        var dragStartY = 0;
+        var dragOffsetX = 0;
+        var dragOffsetY = 0;
+
+        function applyPreviewTransform(smooth) {
+          var img = document.getElementById('preview-img');
+          if (smooth) img.classList.add('smooth');
+          else img.classList.remove('smooth');
+          img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+        }
+
+        function openPreview(id) {
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
+          var img = document.getElementById('preview-img');
+          img.src = '/image/' + id;
+          img.classList.remove('dragging');
+          applyPreviewTransform(false);
+          var dl = document.getElementById('preview-download');
+          dl.href = '/image/' + id + '?download=1';
+          dl.setAttribute('download', 'image_' + id + '.jpg');
+          document.getElementById('image-preview').classList.add('show');
+        }
+
+        function closePreview() {
+          document.getElementById('image-preview').classList.remove('show');
+          var img = document.getElementById('preview-img');
+          img.src = '';
+          img.classList.remove('dragging');
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          dragging = false;
+        }
+
+        function resetPreviewZoom() {
+          previewScale = 1;
+          previewX = 0;
+          previewY = 0;
+          applyPreviewTransform(true);
+        }
+
+        function clampPreviewPosition() {
+          var img = document.getElementById('preview-img');
+          if (!img.src) return;
+          var rect = img.getBoundingClientRect();
+          var vw = window.innerWidth;
+          var vh = window.innerHeight;
+          var margin = 80;
+          var dx = 0, dy = 0;
+          if (rect.right < margin) dx = margin - rect.right;
+          if (rect.left > vw - margin) dx = (vw - margin) - rect.left;
+          if (rect.bottom < margin) dy = margin - rect.bottom;
+          if (rect.top > vh - margin) dy = (vh - margin) - rect.top;
+          if (dx !== 0 || dy !== 0) {
+            previewX += dx;
+            previewY += dy;
+            img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+          }
+        }
+
+        function onPreviewWheel(e) {
+          e.preventDefault();
+          var delta = -e.deltaY * 0.002;
+          previewScale = previewScale * (1 + delta);
+          if (previewScale < previewMinScale) previewScale = previewMinScale;
+          if (previewScale > previewMaxScale) previewScale = previewMaxScale;
+          applyPreviewTransform(true);
+          setTimeout(clampPreviewPosition, 120);
+        }
+
+        function onPreviewMouseDown(e) {
+          if (e.button !== 0) return;
+          dragging = true;
+          dragStartX = e.clientX;
+          dragStartY = e.clientY;
+          dragOffsetX = previewX;
+          dragOffsetY = previewY;
+          document.getElementById('preview-img').classList.add('dragging');
+          e.preventDefault();
+        }
+
+        function onPreviewMouseMove(e) {
+          if (!dragging) return;
+          previewX = dragOffsetX + (e.clientX - dragStartX);
+          previewY = dragOffsetY + (e.clientY - dragStartY);
+          applyPreviewTransform(false);
+        }
+
+        function onPreviewMouseUp(e) {
+          if (!dragging) return;
+          dragging = false;
+          document.getElementById('preview-img').classList.remove('dragging');
+          clampPreviewPosition();
+        }
+
+        function onPreviewMaskClick(e) {
+          if (e.target.id === 'image-preview') closePreview();
+        }
+
+        (function() {
+          var img = document.getElementById('preview-img');
+          img.addEventListener('dblclick', resetPreviewZoom);
+          img.addEventListener('mousedown', onPreviewMouseDown);
+          document.addEventListener('mousemove', onPreviewMouseMove);
+          document.addEventListener('mouseup', onPreviewMouseUp);
+        })();
+
+        // ==================== 工具 ====================
+        function compressImage(file, maxWidth, callback) {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              let width = img.width, height = img.height;
+              if (width > maxWidth) {
+                height = Math.round(height * maxWidth / width);
+                width = maxWidth;
+              }
+              canvas.width = width;
+              canvas.height = height;
+              canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+              callback(canvas.toDataURL('image/jpeg', 0.85));
+            };
+            img.src = e.target.result;
+          };
+          reader.readAsDataURL(file);
+        }
+
         document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape') toggleSidebar(false);
+          if (e.key === 'Escape') { closePreview(); toggleSidebar(false); closeEdit(); }
         });
 
         document.getElementById('edit-btn').onclick = openEdit;
