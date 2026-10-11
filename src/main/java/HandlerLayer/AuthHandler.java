@@ -182,7 +182,9 @@ public class AuthHandler {
         }
     }
 
+    /** POST /api/logout?token=xxx —— 登出（会作废该 token） */
     public void handleLogout(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "POST")) return;
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         sessions.removeSession(token);
         HttpUtil.sendJson(ex, 200, "{\"ok\":true}");
