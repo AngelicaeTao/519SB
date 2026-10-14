@@ -43,12 +43,6 @@ public class Config {
     /** 可信反向代理地址（逗号分隔）。只有直连请求来自这些地址时，才采信 X-Forwarded-For */
     public static final String TRUSTED_PROXIES;
 
-    /** 单个用户可上传的图片总字节上限（默认 200MB），防止灌满磁盘 */
-    public static final long MAX_IMAGE_BYTES_PER_USER;
-
-    /** 单个用户可上传的图片条数上限（默认 300） */
-    public static final int MAX_IMAGE_COUNT_PER_USER;
-
     /**
      * 已加载的配置项。
      * 保留引用是为了支持"按用途分配额"这类运行期查询——
@@ -235,11 +229,6 @@ public class Config {
         SESSION_TTL_DAYS = Integer.parseInt(props.getProperty("session.ttl.days", "30"));
 
         TRUSTED_PROXIES = props.getProperty("trusted.proxies", "127.0.0.1,::1");
-
-        MAX_IMAGE_BYTES_PER_USER = Long.parseLong(
-                props.getProperty("max.image.bytes.per.user", String.valueOf(200L * 1024 * 1024)));
-        MAX_IMAGE_COUNT_PER_USER = Integer.parseInt(
-                props.getProperty("max.image.count.per.user", "300"));
 
         SSE_IDLE_TIMEOUT_MS = Long.parseLong(
                 props.getProperty("sse.idle.timeout.ms", String.valueOf(10L * 60 * 1000)));

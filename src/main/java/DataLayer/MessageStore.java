@@ -18,10 +18,6 @@ public class MessageStore {
         this.maxHistory = maxHistory;
     }
 
-    public long add(String username, String text, String time, String type) {
-        return add(username, text, time, type, null, null);
-    }
-
     public long add(String username, String text, String time, String type, String replyJson) {
         return add(username, text, time, type, replyJson, null);
     }

@@ -286,18 +286,6 @@ public class HttpUtil {
         }
     }
 
-    /** 发送一个带 Set-Cookie 的 HTML 响应 */
-    public static void sendHtmlWithCookie(HttpExchange ex, int status, String html, String cookie) throws IOException {
-        applySecurityHeaders(ex);
-        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
-        if (cookie != null) ex.getResponseHeaders().add("Set-Cookie", cookie);
-        ex.sendResponseHeaders(status, bytes.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            writeOut(ex, os, bytes);
-        }
-    }
-
     /**
      * 按文件头识别图片真实类型，返回 MIME；不是受支持的图片则返回 null。
      * 只靠扩展名或客户端声明的 Content-Type 判定会被伪造，必须看魔数。
@@ -596,11 +584,6 @@ public class HttpUtil {
             try { return Long.parseLong(m.group(1)); } catch (Exception ignored) {}
         }
         return null;
-    }
-
-    /** 拼接 JSON 字符串字段，自动处理闭合引号 */
-    public static String jsonStr(String key, String value) {
-        return "\"" + key + "\":\"" + escapeJson(value) + "\"";
     }
 
     /**

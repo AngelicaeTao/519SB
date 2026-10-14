@@ -96,7 +96,14 @@
                  white-space: pre-wrap; word-break: break-word; }
   .mention-badge { background: #ffb300; color: #fff; font-size: 10px; padding: 1px 5px; border-radius: 8px; }
   #input-area { background: #fff; padding: 10px; display: flex; box-shadow: 0 -1px 3px rgba(0,0,0,0.1); align-items: flex-end; gap: 8px; position: relative; }
-  #input { flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 10px; font-size: 15px; resize: none; min-height: 42px; max-height: 120px; font-family: inherit; line-height: 1.4; outline: none; }
+  #input { flex: 1; border: 1px solid #ddd; border-radius: 6px; padding: 10px; font-size: 15px; resize: none; min-height: 42px; font-family: inherit; line-height: 1.4; outline: none; }
+  /* 拖拽条：只占上边缘一条窄带，靠 cursor 与 hover 提示可拖。
+     默认高度由 autoResizeInput() 按内容自动设置 */
+  #input-resize {
+    position: absolute; top: 0; left: 0; right: 0; height: 7px;
+    cursor: ns-resize; z-index: 5;
+  }
+  #input-resize:hover, #input-resize.dragging { background: rgba(7,193,96,0.12); }
   #input:focus { border-color: var(--primary); }
   #send-btn { background: var(--primary); color: #fff; border: none; border-radius: 6px; padding: 10px 20px; font-size: 15px; cursor: pointer; }
   #send-btn:disabled, #voice-btn:disabled, #plus-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -476,7 +483,7 @@
   #image-preview { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; overflow: hidden; }
   #image-preview.show { display: flex; }
   .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
-  .preview-content img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; cursor: grab; user-select: none; -webkit-user-drag: none; }
+  .preview-content img { max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px; cursor: grab; user-select: none; -webkit-user-drag: none; will-change: transform; transform: translateZ(0); backface-visibility: hidden; }
   .preview-content img.dragging { cursor: grabbing; transition: none; }
   .preview-content img.smooth { transition: transform 0.1s ease-out; }
   .preview-actions { display: flex; gap: 12px; }
@@ -562,6 +569,7 @@
   </div>
 </div>
 <div id="input-area">
+  <div id="input-resize" title="上下拖动调整输入框高度（双击恢复自动高度）" tabindex="0"></div>
   <div id="reply-bar"><span class="rb-name"></span><span class="rb-text"></span><span class="rb-close" onclick="clearReply()">✕</span></div>
   <div id="rec-bar"><span id="rec-dot"></span><span id="rec-time">0:00</span><span class="rb-text">正在录音…点麦克风结束并发送，点 ✕ 取消</span><span class="rb-close" onclick="cancelRecording()" title="取消录音">✕</span></div>
   <div id="up-bar"><span id="up-text">正在上传…</span><span id="up-track"><span id="up-fill"></span></span></div>
@@ -664,10 +672,116 @@ function formatTimeNow() {
   var d = new Date();
   return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
 }
-function autoResizeInput() {
-  input.style.height = 'auto';
-  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+// ==================== 输入框高度 ====================
+var INPUT_MIN_H = 42;                 // 单行高度
+var INPUT_AUTO_MAX_H = 120;           // 自动增高时的上限
+var inputResizeHandle = document.getElementById('input-resize');
+// 用户手动拖过的高度；null 表示仍按内容自动增高
+var userInputHeight = null;
+
+function inputMaxHeight() {
+  return Math.max(INPUT_AUTO_MAX_H, Math.round(window.innerHeight * 0.5));
 }
+
+/**
+ * 内容实际需要的高度（border-box 口径）。
+ *
+ * 直接用 scrollHeight 即可：它包含 padding，与 box-sizing: border-box 的
+ * height 同一口径。不要拿 scrollHeight - clientHeight 去推"文字高度"——
+ * 高度为 auto 时 clientHeight 是内容盒高度，两者相减会得出负值。
+ *
+ * 减去一点经验余量，让空输入框不会比单行高度高出几个像素。
+ */
+function inputContentHeight() {
+  var prev = input.style.height;
+  input.style.height = 'auto';
+  var sh = input.scrollHeight;
+  input.style.height = prev;
+  return Math.max(INPUT_MIN_H, sh - 20);
+}
+
+function autoResizeInput() {
+  var maxH = inputMaxHeight();
+  if (userInputHeight !== null) {
+    // 用户指定了高度：只保证不低于内容所需，不再自动回落
+    input.style.height = Math.min(maxH, Math.max(userInputHeight, inputContentHeight())) + 'px';
+    return;
+  }
+  input.style.height = Math.min(maxH, Math.max(INPUT_MIN_H, inputContentHeight())) + 'px';
+}
+
+function setUserInputHeight(px) {
+  userInputHeight = Math.max(INPUT_MIN_H, Math.min(px, inputMaxHeight()));
+  autoResizeInput();
+}
+
+function resetUserInputHeight() {
+  userInputHeight = null;
+  input.style.height = 'auto';
+  autoResizeInput();
+}
+
+// 拖动上缘调整高度：向上拖变高，向下拖变矮
+(function initInputResize() {
+  if (!inputResizeHandle) return;
+  var dragging = false;
+  var startY = 0;
+  var startH = 0;
+
+  inputResizeHandle.addEventListener('mousedown', function (e) {
+    dragging = true;
+    startY = e.clientY;
+    // 拖过之后就以当前实际高度为基准
+    startH = input.offsetHeight;
+    inputResizeHandle.classList.add('dragging');
+    document.body.style.cursor = 'ns-resize';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function (e) {
+    if (!dragging) return;
+    setUserInputHeight(startH - (e.clientY - startY));
+    e.preventDefault();
+  });
+
+  document.addEventListener('mouseup', function () {
+    if (!dragging) return;
+    dragging = false;
+    inputResizeHandle.classList.remove('dragging');
+    document.body.style.cursor = '';
+  });
+
+  // 双击恢复自动高度
+  inputResizeHandle.addEventListener('dblclick', function (e) {
+    e.preventDefault();
+    resetUserInputHeight();
+  });
+
+  // 键盘可达：聚焦拖拽条后用上下箭头调整，Esc 复位
+  inputResizeHandle.tabIndex = 0;
+  inputResizeHandle.addEventListener('keydown', function (e) {
+    var base = (userInputHeight === null) ? INPUT_MIN_H : userInputHeight;
+    if (e.key === 'ArrowUp') {
+      setUserInputHeight(base + 12);      // 上箭头 = 变高
+      e.preventDefault();
+    } else if (e.key === 'ArrowDown') {
+      setUserInputHeight(base - 12);      // 下箭头 = 变矮
+      e.preventDefault();
+    } else if (e.key === 'Escape') {
+      resetUserInputHeight();
+      e.preventDefault();
+    }
+  });
+})();
+
+// 首次按内容定高，否则会停在浏览器给 textarea 的默认高度上
+autoResizeInput();
+
+// 窗口尺寸变化时重新夹取，避免高度超出新的上限
+window.addEventListener('resize', function () {
+  if (userInputHeight !== null) setUserInputHeight(userInputHeight);
+});
+
 function updateTitle() {
   document.title = unreadCount > 0 ? '(' + unreadCount + ') ' + BASE_TITLE : BASE_TITLE;
 }

@@ -97,16 +97,6 @@ public class SseManager {
         return Math.max(0, globalCount.get());
     }
 
-    /** 统计某个用户当前的 SSE 连接数 */
-    public int countConnectionsFor(String username) {
-        if (username == null) return 0;
-        int count = 0;
-        for (String u : clients.values()) {
-            if (username.equals(u)) count++;
-        }
-        return count;
-    }
-
     public void broadcast(String data) {
         if (data == null) return;
         byte[] payload = ("data: " + data + "\n\n").getBytes(StandardCharsets.UTF_8);

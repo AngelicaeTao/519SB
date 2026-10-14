@@ -251,10 +251,6 @@ public class PostStore {
 
     // ==================== 评论 ====================
 
-    public long addComment(long postId, String username, String content, Long parentId) {
-        return addComment(postId, username, content, parentId, null);
-    }
-
     /**
      * 发表评论。
      *

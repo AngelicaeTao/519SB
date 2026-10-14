@@ -77,11 +77,6 @@ public final class Theme {
         return "<style id=\"theme-override\">" + BLOCKS.get(t) + "</style>";
     }
 
-    /** 主题清单，供前端渲染选项 */
-    public static Map<String, String> list() {
-        return NAMES;
-    }
-
     /**
      * 主题选项的 JSON。
      * 带上完整变量（vars），前端才能把配色存进 localStorage 后自行应用，
