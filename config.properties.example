@@ -36,6 +36,11 @@ thread.pool.size=16
 # 门禁验证码（首次访问需要输入的）
 access.code=519666233
 
+# 默认管理员账号。首次启动时会用这组凭据创建管理员；之后改密码以数据库为准。
+# ★ 公开部署前务必改掉——默认值写在代码里，任何人 clone 后都知道。
+admin.username=admin
+admin.password=admin123
+
 # 登录失败限制：在 login.window.ms 毫秒内，同一账号最多尝试 login.max.attempts 次
 login.max.attempts=5
 login.window.ms=60000
@@ -53,11 +58,56 @@ session.ttl.days=30
 # 如果换成 Cloudflare / frp / nginx 等部署，把它们的前置地址加进来，否则 IP 限流会被伪造头绕过。
 trusted.proxies=127.0.0.1,::1
 
+# ===== 上传配额（按用途分别计算）=====
+# 每个用户在每个用途下独立计数，互不挤占：
+#   message  聊天图片
+#   avatar   头像
+#   post     帖子配图
+#   comment  评论/回复配图
+#
+# 下面两个不带用途的键是历史配置，只对 message / post 生效
+# （当初就是为聊天图和帖子图设计的）。
+# 头像和评论的默认值分别是 10张/5MB 和 200张/150MB，
+# 想改就用带用途后缀的键，例如：
+#   max.image.count.per.user.avatar=10
+#   max.image.bytes.per.user.avatar=5242880
+
 # 单个用户可上传的图片总字节上限（默认 200MB），防止灌满磁盘
 max.image.bytes.per.user=209715200
 
 # 单个用户可上传的图片条数上限（默认 300）
 max.image.count.per.user=300
+
+# 头像：条数少、体积小，且只保留最近 5 张
+# max.image.count.per.user.avatar=10
+# max.image.bytes.per.user.avatar=5242880
+
+# 评论配图
+# max.image.count.per.user.comment=200
+# max.image.bytes.per.user.comment=157286400
+
+# 语音（聊天里录制的语音，单条最长 60 秒）
+# max.image.count.per.user.voice=100
+# max.image.bytes.per.user.voice=104857600
+
+# 动态图（GIF / 动态 WebP，原样上传不压缩，所以比静态图大）
+# max.image.count.per.user.anim=100
+# max.image.bytes.per.user.anim=104857600
+
+# 文件（聊天里分享的附件，强制以附件下载）
+# max.image.count.per.user.file=100
+# max.image.bytes.per.user.file=524288000
+
+# 单个文件的大小上限（默认：图片/语音/动图 5MB、文件 20MB）
+# 注意：上传接口的请求体上限本身是 25MB（见 ChatServer.MAX_BODY_UPLOAD），
+# 所以这里的值不应超过它，否则文件还没走到类型校验就会被挡掉。
+# max.media.size.file=20971520
+
+# 媒体保留时长（毫秒）。不写则：聊天图 24 小时、语音 7 天，其余永久保留。
+# 帖子图和评论图不建议设保留期——帖子/评论会永久保留，媒体被删了就成了裂图。
+# 语音可以设，因为聊天记录本身有条数上限，旧消息本来就会被裁掉。
+# image.retention.ms.message=86400000
+# image.retention.ms.voice=604800000
 
 # SSE 长连接空闲多久后自动断开（毫秒，默认 10 分钟）
 # 用于回收挂死的连接，避免它们长期占用「每用户 3 条 / 每 IP 10 条」的名额
