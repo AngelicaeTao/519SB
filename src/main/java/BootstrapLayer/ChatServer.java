@@ -47,6 +47,15 @@ public class ChatServer {
      */
     public static final long MAX_BODY_UPLOAD = 25L * 1024 * 1024;
 
+    /**
+     * SSE 连接多久没成功写出过数据就算卡死（毫秒）。
+     *
+     * 对端半死（浏览器被强杀、断网）时，往它写数据的虚拟线程会一直阻塞；
+     * 虽然 SseManager 的广播只入队不再阻塞别人，但这条连接仍然占着名额、
+     * 而且会让在线列表失真，所以还是要定期清掉。
+     */
+    public static final long SSE_STUCK_TIMEOUT_MS = 60_000;
+
     public static void main(String[] args) throws Exception {
         DatabaseManager.init();
 
@@ -162,6 +171,22 @@ public class ChatServer {
         cleaner.scheduleAtFixedRate(() -> {
             try { TrafficMonitor.printSummary(); } catch (Exception ignored) {}
         }, 5, 5, TimeUnit.MINUTES);
+
+        // SSE 卡死连接清理。对端半死时那条连接的写线程会一直阻塞，
+        // 它占着名额、也让在线列表失真，所以要主动踢掉。
+        // 注意：SseManager 的广播本身只入队不写 socket，这里只是为了回收资源。
+        cleaner.scheduleAtFixedRate(() -> {
+            try {
+                if (sse.sweepStuck(SSE_STUCK_TIMEOUT_MS) > 0) {
+                    StringBuilder sb = new StringBuilder();
+                    for (String u : sse.listOnlineUsers()) {
+                        if (sb.length() > 0) sb.append(',');
+                        sb.append('"').append(HttpUtil.escapeJson(u)).append('"');
+                    }
+                    sse.broadcast("{\"type\":\"online_list\",\"users\":[" + sb + "]}");
+                }
+            } catch (Exception ignored) {}
+        }, 30, 30, TimeUnit.SECONDS);
 
         // 退出前把剩余增量落盘，避免重启丢掉最后几十秒的统计
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
