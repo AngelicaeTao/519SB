@@ -105,6 +105,15 @@ public class AuthHandler {
             return;
         }
 
+        // 账号只允许数字、字母、下划线。
+        // 注意：这条只作用于注册，登录不做校验，
+        // 所以历史遗留的账号（含特殊字符）依然能照常登录。
+        String nameErr = checkUsernameFormat(username);
+        if (nameErr != null) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"" + nameErr + "\"}");
+            return;
+        }
+
         String pwdErr = checkPasswordStrength(password);
         if (pwdErr != null) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"" + pwdErr + "\"}");
@@ -188,6 +197,29 @@ public class AuthHandler {
         String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
         sessions.removeSession(token);
         HttpUtil.sendJson(ex, 200, "{\"ok\":true}");
+    }
+
+    /**
+     * 账号格式校验：只允许数字、字母、下划线。
+     *
+     * 用显式的白名单扫描而不是正则，避免忽略大小写、Unicode 子集等问题；
+     * 这样也不会误放行全角字符或其它语言的字母。
+     *
+     * 只在注册时调用。登录路径不做校验，历史遗留账号（含特殊字符）不受影响。
+     */
+    private String checkUsernameFormat(String username) {
+        if (username == null || username.isEmpty()) return "账号不能为空";
+        for (int i = 0; i < username.length(); i++) {
+            char c = username.charAt(i);
+            boolean ok = (c >= 'a' && c <= 'z')
+                    || (c >= 'A' && c <= 'Z')
+                    || (c >= '0' && c <= '9')
+                    || c == '_';
+            if (!ok) {
+                return "账号只能使用数字、字母和下划线（当前含非法字符：" + c + "）";
+            }
+        }
+        return null;
     }
 
     private String checkPasswordStrength(String pwd) {

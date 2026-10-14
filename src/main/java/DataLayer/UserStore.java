@@ -218,27 +218,31 @@ public class UserStore {
         return result;
     }
 
+    /**
+     * 管理员修改用户资料。
+     *
+     * 注意：这里**不涉及头像**。头像只能由用户本人在个人中心修改，
+     * 管理员不应代替他人更换头像。
+     */
     public boolean adminUpdate(String username, String nickname, String newPassword,
-                               String avatarId, boolean isAdmin) {
+                               boolean isAdmin) {
         if (username == null) return false;
         try (Connection conn = DatabaseManager.getConnection()) {
             if (newPassword != null && !newPassword.isEmpty()) {
                 try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE users SET nickname = ?, avatar_id = ?, is_admin = ?, password_hash = ? WHERE username = ?")) {
+                        "UPDATE users SET nickname = ?, is_admin = ?, password_hash = ? WHERE username = ?")) {
                     ps.setString(1, nickname);
-                    ps.setString(2, avatarId);
-                    ps.setInt(3, isAdmin ? 1 : 0);
-                    ps.setString(4, hash(newPassword));
-                    ps.setString(5, username);
+                    ps.setInt(2, isAdmin ? 1 : 0);
+                    ps.setString(3, hash(newPassword));
+                    ps.setString(4, username);
                     return ps.executeUpdate() > 0;
                 }
             } else {
                 try (PreparedStatement ps = conn.prepareStatement(
-                        "UPDATE users SET nickname = ?, avatar_id = ?, is_admin = ? WHERE username = ?")) {
+                        "UPDATE users SET nickname = ?, is_admin = ? WHERE username = ?")) {
                     ps.setString(1, nickname);
-                    ps.setString(2, avatarId);
-                    ps.setInt(3, isAdmin ? 1 : 0);
-                    ps.setString(4, username);
+                    ps.setInt(2, isAdmin ? 1 : 0);
+                    ps.setString(3, username);
                     return ps.executeUpdate() > 0;
                 }
             }
