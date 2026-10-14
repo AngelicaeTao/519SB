@@ -60,7 +60,8 @@ if not exist "!JAR_SLF4J_SIMPLE!" (
     exit /b 1
 )
 
-set CP_DEPS=!JAR_SQLITE!;!JAR_SLF4J_API!;!JAR_SLF4J_SIMPLE!
+REM 页面模板放在 src\main\resources\web，运行时从 classpath 读取，所以要把它也加进来
+set CP_DEPS=!JAR_SQLITE!;!JAR_SLF4J_API!;!JAR_SLF4J_SIMPLE!;src\main\resources
 
 REM ===== 4. 编译 =====
 echo [1/3] 编译 Java 代码...

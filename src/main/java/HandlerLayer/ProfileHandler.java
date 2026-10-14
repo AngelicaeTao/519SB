@@ -8,6 +8,7 @@ import ViewLayer.ProfilePage;
 import com.sun.net.httpserver.HttpExchange;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /** 个人中心：查看/修改自己的昵称、头像、密码 */
@@ -24,7 +25,14 @@ public class ProfileHandler {
     }
 
     public void handlePage(HttpExchange ex) throws IOException {
-        HttpUtil.sendHtml(ex, 200, ProfilePage.HTML);
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String username = sessions.getUser(token);
+        String theme = null;
+        if (username != null) {
+            User u = userStore.getUser(username);
+            if (u != null) theme = u.theme;
+        }
+        HttpUtil.sendHtmlThemed(ex, 200, ProfilePage.HTML, theme);
     }
 
     public void handleUpdate(HttpExchange ex) throws IOException {
@@ -117,6 +125,84 @@ public class ProfileHandler {
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"修改失败\"}");
         }
+    }
+
+    /**
+     * GET /api/profile/nicknames?token=xxx&username=yyy
+     *
+     * 昵称历史。默认查自己；带 username 时查别人（昵称本来就是公开信息，
+     * 聊天和帖子里都会显示，所以不做额外限制）。
+     *
+     * 返回里带上 current，这样前端直接展示"现用 + 历史"，不会因为
+     * 历史记录滞后而把当前昵称显示错。
+     */
+    public void handleNicknameHistory(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "GET")) return;
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String me = sessions.getUser(token);
+        if (me == null) {
+            HttpUtil.sendJson(ex, 401, "{\"ok\":false,\"msg\":\"未登录\"}");
+            return;
+        }
+
+        String query = ex.getRequestURI().getQuery();
+        String target = HttpUtil.getQueryParam(query, "username");
+        if (target == null || target.isBlank()) target = me;
+
+        if (!userStore.exists(target)) {
+            HttpUtil.sendJson(ex, 404, "{\"ok\":false,\"msg\":\"用户不存在\"}");
+            return;
+        }
+
+        List<String[]> rows = userStore.nicknameHistory(target, 50);
+        String current = userStore.getNickname(target);
+
+        StringBuilder sb = new StringBuilder("{\"ok\":true,\"username\":\"")
+                .append(HttpUtil.escapeJson(target)).append("\"")
+                .append(",\"current\":\"").append(HttpUtil.escapeJson(current == null ? "" : current)).append("\"")
+                .append(",\"history\":[");
+        for (int i = 0; i < rows.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("{\"nickname\":\"").append(HttpUtil.escapeJson(rows.get(i)[0])).append("\"")
+              .append(",\"changedAt\":").append(rows.get(i)[1]).append("}");
+        }
+        sb.append("]}");
+        HttpUtil.sendJson(ex, 200, sb.toString());
+    }
+
+    /**
+     * `/api/profile/theme` —— 个性化配色。
+     *
+     * GET  返回可选主题列表 + 当前主题
+     * POST body {"theme":"blue"} 保存选择
+     *
+     * 只允许 Theme 白名单里的名字，客户端传别的值一律回退到默认，不会写进库。
+     */
+    public void handleTheme(HttpExchange ex) throws IOException {
+        String method = ex.getRequestMethod();
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String username = sessions.getUser(token);
+        if (username == null) {
+            HttpUtil.sendJson(ex, 401, "{\"ok\":false,\"msg\":\"未登录\"}");
+            return;
+        }
+
+        if ("POST".equalsIgnoreCase(method)) {
+            String body = HttpUtil.readBody(ex, BootstrapLayer.ChatServer.MAX_BODY_NORMAL);
+            String wanted = HttpUtil.extractJsonString(body, "theme");
+            String theme = InfrastructureLayer.Theme.normalize(wanted);
+            if (userStore.setTheme(username, theme)) {
+                HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"theme\":\"" + theme + "\"}");
+            } else {
+                HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"保存失败\"}");
+            }
+            return;
+        }
+
+        if (HttpUtil.rejectWrongMethod(ex, "GET")) return;
+        String current = InfrastructureLayer.Theme.normalize(userStore.getTheme(username));
+        HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"current\":\"" + current + "\""
+                + ",\"themes\":" + InfrastructureLayer.Theme.listJson() + "}");
     }
 
     /** 密码强度校验 */

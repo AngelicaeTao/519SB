@@ -62,7 +62,45 @@ public class DatabaseManager {
                     text TEXT NOT NULL,
                     time TEXT NOT NULL,
                     type TEXT NOT NULL DEFAULT 'text',
-                    created_at INTEGER NOT NULL
+                    created_at INTEGER NOT NULL,
+                    reply TEXT
+                )
+            """);
+            // 兼容旧库：补 reply 列（回复引用）。已存在时抛异常，忽略即可
+            try {
+                st.execute("ALTER TABLE messages ADD COLUMN reply TEXT");
+            } catch (SQLException ignored) {}
+
+            // 文件消息的原始文件名（用于在消息里显示、并作为下载名）
+            try {
+                st.execute("ALTER TABLE messages ADD COLUMN filename TEXT");
+            } catch (SQLException ignored) {}
+
+            // 个性化配色：用户选择的主题名
+            try {
+                st.execute("ALTER TABLE users ADD COLUMN theme TEXT");
+            } catch (SQLException ignored) {}
+
+            // 历史昵称：每次昵称变更留一条记录，供个人中心回看
+            st.execute("""
+                CREATE TABLE IF NOT EXISTS nickname_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT NOT NULL,
+                    nickname TEXT NOT NULL,
+                    changed_at INTEGER NOT NULL
+                )
+            """);
+            st.execute("CREATE INDEX IF NOT EXISTS idx_nickname_history_user " +
+                    "ON nickname_history(username, changed_at)");
+
+            // 流量按月分桶。username 为空串表示无法归属到具体用户（未登录访问）
+            st.execute("""
+                CREATE TABLE IF NOT EXISTS traffic_month (
+                    period TEXT NOT NULL,
+                    username TEXT NOT NULL,
+                    bytes_in INTEGER NOT NULL DEFAULT 0,
+                    bytes_out INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (period, username)
                 )
             """);
 
@@ -74,9 +112,16 @@ public class DatabaseManager {
                     type TEXT NOT NULL DEFAULT 'message',
                     created_at INTEGER NOT NULL,
                     username TEXT,
-                    mime TEXT
+                    mime TEXT,
+                    filename TEXT
                 )
             """);
+
+            // 老库补列。必须放在建表之后——放在前面时新库里表还不存在，
+            // ALTER 会失败并被静默忽略，导致全新部署缺列、上传直接报错。
+            try {
+                st.execute("ALTER TABLE images ADD COLUMN filename TEXT");
+            } catch (SQLException ignored) {}
 
             // 会话表
             st.execute("""
@@ -124,9 +169,15 @@ public class DatabaseManager {
                     username TEXT NOT NULL,
                     content TEXT NOT NULL,
                     parent_id INTEGER DEFAULT NULL,
-                    created_at INTEGER NOT NULL
+                    created_at INTEGER NOT NULL,
+                    images TEXT
                 )
             """);
+
+            // 兼容旧库：评论配图列
+            try {
+                st.execute("ALTER TABLE post_comments ADD COLUMN images TEXT");
+            } catch (SQLException ignored) {}
 
             // 兼容旧库：images 表可能没有 type 字段
             try {
@@ -141,6 +192,17 @@ public class DatabaseManager {
             // 图片真实 MIME（由文件头判定），用于按真实类型返回 Content-Type
             try {
                 st.execute("ALTER TABLE images ADD COLUMN mime TEXT");
+            } catch (SQLException ignored) {}
+
+            // ====== 视频功能已移除，迁移历史数据 ======
+            // 旧的 video 类型消息改成 file，这样它们仍能作为附件下载，
+            // 而不是在页面上显示成一串看不懂的 id。
+            try {
+                int n = st.executeUpdate("UPDATE messages SET type = 'file' WHERE type = 'video'");
+                int m = st.executeUpdate("UPDATE images SET type = 'file' WHERE type = 'video'");
+                if (n > 0 || m > 0) {
+                    System.out.println("[DB] 视频功能已移除，迁移历史记录：消息 " + n + " 条，媒体 " + m + " 个");
+                }
             } catch (SQLException ignored) {}
 
             // ====== 兼容旧库：messages 表可能没有 created_at 列 ======

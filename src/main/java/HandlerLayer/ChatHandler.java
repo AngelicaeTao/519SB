@@ -1,6 +1,7 @@
 package HandlerLayer;
 
 import ConfigurationLayer.Config;
+import DataLayer.ImageStore;
 import DataLayer.MessageStore;
 import DataLayer.User;
 import DataLayer.UserStore;
@@ -39,12 +40,19 @@ public class ChatHandler {
     }
 
     public void handleIndex(HttpExchange ex) throws IOException {
-        byte[] bytes = WebPages.INDEX_HTML.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
-        ex.sendResponseHeaders(200, bytes.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            os.write(bytes);
-        }
+        HttpUtil.sendHtmlThemed(ex, 200, WebPages.INDEX_HTML, currentTheme(ex));
+    }
+
+    /**
+     * 取当前登录用户的配色主题名；未登录或没设过返回 null（即默认配色）。
+     * 页面本身对未登录是放行的（前端会跳转登录页），所以这里不能假设一定有会话。
+     */
+    private String currentTheme(HttpExchange ex) {
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String username = sessions.getUser(token);
+        if (username == null) return null;
+        User u = userStore.getUser(username);
+        return (u == null) ? null : u.theme;
     }
 
     public void handleSend(HttpExchange ex) throws IOException {
@@ -81,12 +89,39 @@ public class ChatHandler {
         if (time == null) time = "";
         if (type == null) type = "text";
 
+        // 消息类型白名单：客户端能塞任意字符串的话，未知 type 会一路进库，
+        // 到前端就成了渲染不出来的消息。
+        if (!isMessageType(type)) type = "text";
+
         if (text.length() > 2000) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"消息过长（最多 2000 字）\"}");
             return;
         }
 
-        long id = store.add(username, text, time, type);
+        // 图片/语音/视频/文件的正文是媒体 id，必须确认这个 id 是该用户自己上传的。
+        // 否则任何登录用户都能把别人的附件挂到自己的消息里。
+        //
+        // 注意用途映射：图片消息的类型是 image，但上传时的用途是 message，
+        // 直接拿消息类型去查 images.type 会把所有图片误判成"不属于你"。
+        if (isAttachmentType(type)) {
+            String uploadType = Config.uploadTypeForMessage(type);
+            if (!ImageStore.ownsAll(username, java.util.List.of(text), uploadType)) {
+                HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"附件无效或不属于你\"}");
+                return;
+            }
+        }
+
+        // 文件消息的显示名。必须净化——它会进页面文本，也会进下载头
+        String fileName = null;
+        if ("file".equals(type)) {
+            fileName = HttpUtil.sanitizeFileName(HttpUtil.extractJsonString(body, "fileName"));
+        }
+
+        // 回复引用：只取服务端自己解析出的 id/author/text 重新拼一份干净的 JSON，
+        // 绝不把客户端传来的片段原样入库（否则就是注入 JSON 的入口）
+        String replyJson = parseReply(body);
+
+        long id = store.add(username, text, time, type, replyJson, fileName);
         long now = System.currentTimeMillis();
 
         String msg = "{\"id\":" + id
@@ -96,7 +131,10 @@ public class ChatHandler {
                 + "\",\"avatarId\":" + (user.avatarId == null ? "null" : "\"" + HttpUtil.escapeJson(user.avatarId) + "\"")
                 + ",\"text\":\"" + HttpUtil.escapeJson(text)
                 + "\",\"time\":\"" + HttpUtil.escapeJson(time)
-                + "\",\"type\":\"" + HttpUtil.escapeJson(type) + "\"}";
+                + "\",\"type\":\"" + HttpUtil.escapeJson(type)
+                + "\",\"reply\":" + (replyJson == null ? "null" : replyJson)
+                + ",\"fileName\":" + (fileName == null ? "null" : "\"" + HttpUtil.escapeJson(fileName) + "\"")
+                + "}";
 
         sse.broadcast(msg);
         ex.sendResponseHeaders(204, -1);
@@ -307,5 +345,56 @@ public class ChatHandler {
         }
         sb.append("]}");
         HttpUtil.sendJson(ex, 200, sb.toString());
+    }
+
+    /** 消息类型是否在白名单里 */
+    private boolean isMessageType(String type) {
+        if (type == null) return false;
+        for (String t : Config.MESSAGE_TYPES) {
+            if (t.equals(type)) return true;
+        }
+        return false;
+    }
+
+    /** 该消息类型的正文是不是媒体 id（需要校验归属） */
+    private boolean isAttachmentType(String type) {
+        if (type == null) return false;
+        for (String t : Config.ATTACHMENT_MESSAGE_TYPES) {
+            if (t.equals(type)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 从请求体里解析「回复」引用，重新拼一份干净的 JSON。
+     *
+     * 安全要点：绝不把客户端传来的 reply 片段原样入库。
+     * 只取 id / author / text 三个字段，逐个转义后重新组装，
+     * 这样即使请求体里塞了畸形 JSON，也不会污染消息记录的 JSON 结构。
+     *
+     * @return 引用的 JSON 片段；无引用或字段不全时返回 null
+     */
+    private String parseReply(String body) {
+        if (body == null) return null;
+        int keyIdx = body.indexOf("\"reply\"");
+        if (keyIdx < 0) return null;
+
+        int open = body.indexOf('{', keyIdx);
+        if (open < 0) return null;                        // "reply":null 之类
+        int close = body.indexOf('}', open);
+        if (close < open) return null;
+        String inner = body.substring(open, close + 1);
+
+        String author = HttpUtil.extractJsonString(inner, "author");
+        String text = HttpUtil.extractJsonString(inner, "text");
+        if (author == null || author.isBlank() || text == null) return null;
+
+        Long id = HttpUtil.extractJsonLong(inner, "id");
+        if (text.length() > 200) text = text.substring(0, 200);
+        if (author.length() > 40) author = author.substring(0, 40);
+
+        return "{\"id\":" + (id == null ? "null" : id)
+                + ",\"author\":\"" + HttpUtil.escapeJson(author)
+                + "\",\"text\":\"" + HttpUtil.escapeJson(text) + "\"}";
     }
 }

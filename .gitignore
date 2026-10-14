@@ -1,5 +1,9 @@
-# ===== Maven 编译输出 =====
+# ===== Maven / 构建输出 =====
 target/
+build/
+bin/
+out/
+*.class
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
@@ -7,35 +11,68 @@ pom.xml.next
 release.properties
 dependency-reduced-pom.xml
 
-# ===== IntelliJ IDEA =====
+# ===== IntelliJ IDEA / Eclipse / VS Code =====
 .idea/
 *.iml
 *.iws
 *.ipr
 .idea_modules/
+.classpath
+.project
+.settings/
+.vscode/
 
-# ===== 敏感文件（含私钥）=====
+# ===== 敏感文件（含私钥，绝不入库）=====
 keystore.p12
 *.p12
 *.jks
 *.keystore
 *.truststore
 
-# ===== 本机配置 =====
+# ===== 本机配置（含门禁码与默认管理员密码）=====
 config.properties
 
-# ===== 数据库和用户数据 =====
+# ===== 数据库与用户数据 =====
 data/
 users.properties
+# SQLite 主库与运行时旁路文件（-wal / -shm / -journal）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
 
 # ===== ngrok =====
 ngrok.exe
 ngrok
 ngrok.zip
+ngrok.yml
+ngrok.yaml
 
-# ===== 旧编译产物 =====
-out/
-*.class
+# ===== 本机文档（只在本机参考，不上传）=====
+ROADMAP.md
+QUOTA_PLAN.md
+
+# ===== 单机测试 / 临时构建中转目录 =====
+# 这些是我做验证时用的隔离环境（独立库 + 独立 config），不参与提交
+.vout/
+.vu/
+.v[0-9]*/
+.cleanout/
+.diag/
+.regapp/
+.finaltest/
+.mediatest/
+.novideo/
+.owncheck/
+.pagedump-baseline/
+.acl-recovery/
+*.pagedump*
+
+# ===== JVM 崩溃日志 =====
+hs_err_pid*.log
+replay_pid*.log
 
 # ===== 日志 =====
 *.log
@@ -46,8 +83,11 @@ logs/
 Thumbs.db
 Desktop.ini
 
-# ===== 临时文件 =====
+# ===== 编辑器 / 合并残留 =====
 *.tmp
 *.bak
 *.swp
+*.swo
 *~
+*.orig
+*.rej

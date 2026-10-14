@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>__U_NICKNAME__ 的主页 - 519SB 聊天室</title>
+<style>
+  /* ===== 主题变量：服务器按用户偏好注入覆盖块，默认即绿色 ===== */
+  :root {
+    --primary: #07c160;
+    --primary-dark: #06ad56;
+    --primary-light: #e8f7f0;
+    --primary-fade: #f0f9f4;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #e5e5e5; height: 100vh; overflow-y: auto; }
+  #header { background: #fff; padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+  #header h1 { font-size: 16px; color: #333; }
+  #header .nav { display: flex; gap: 8px; }
+  #header a { font-size: 13px; color: var(--primary); text-decoration: none; padding: 6px 12px; border: 1px solid var(--primary); border-radius: 6px; }
+  #header a:hover { background: var(--primary); color: #fff; }
+  .container { max-width: 520px; margin: 20px auto; padding: 0 15px; }
+  .card { background: #fff; border-radius: 12px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  /* 头部身份区 */
+  .profile-head { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .big-avatar {
+    width: 96px; height: 96px; border-radius: 50%;
+    background: var(--primary); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px; font-weight: bold; overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .big-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .nick-line { font-size: 19px; font-weight: 600; color: #333; display: flex; align-items: center; gap: 8px; }
+  .badge-admin {
+    font-size: 11px; font-weight: normal;
+    background: var(--primary); color: #fff;
+    padding: 2px 8px; border-radius: 10px;
+  }
+  .sub { font-size: 12px; color: #999; margin-top: 6px; }
+
+  /* 统计 */
+  .stats { display: flex; gap: 10px; margin-top: 18px; width: 100%; }
+  .stat { flex: 1; background: var(--primary-fade); border-radius: 10px; padding: 12px 6px; text-align: center; }
+  .stat .num { font-size: 18px; font-weight: 600; color: var(--primary); }
+  .stat .lbl { font-size: 11px; color: #888; margin-top: 2px; }
+
+  /* 信息行 */
+  .info-row { display: flex; justify-content: space-between; font-size: 13px; padding: 9px 0; border-bottom: 1px solid #f5f5f5; }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .k { color: #999; }
+  .info-row .v { color: #333; word-break: break-all; text-align: right; }
+
+  /* 历史昵称 */
+  .nick-item { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-bottom: 1px dashed #f5f5f5; font-size: 13px; color: #333; }
+  .nick-item:last-child { border-bottom: none; }
+  .nick-item .nick-name { flex: 1; word-break: break-all; }
+  .nick-item .nick-time { font-size: 11px; color: #999; white-space: nowrap; }
+  .nick-item.cur { color: var(--primary); font-weight: 500; }
+  .nick-item.cur::after {
+    content: '当前'; font-size: 10px; font-weight: normal;
+    background: var(--primary); color: #fff;
+    padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+  }
+  .empty { color: #999; font-size: 12px; padding: 6px 0; }
+</style>
+<script src="/theme.js"></script></head><body>
+<div id="header">
+  <h1>用户主页</h1>
+  <div class="nav">
+    <a href="/posts">论坛</a>
+    <a href="/chat">聊天室</a>
+  </div>
+</div>
+
+<div class="container">
+  <div class="card">
+    <div class="profile-head">
+      <div class="big-avatar" id="u-avatar"></div>
+      <div class="nick-line">
+        <span id="u-nick"></span>
+        <span class="badge-admin" id="u-admin" style="display:none;">管理员</span>
+      </div>
+      <div class="sub" id="u-sub"></div>
+
+      <div class="stats">
+        <div class="stat"><div class="num" id="u-msgs">0</div><div class="lbl">聊天消息</div></div>
+        <div class="stat"><div class="num" id="u-posts">0</div><div class="lbl">发布帖子</div></div>
+        <div class="stat"><div class="num" id="u-nickcount">0</div><div class="lbl">历史昵称</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="info-row"><span class="k">账号</span><span class="v" id="u-username"></span></div>
+    <div class="info-row"><span class="k">注册时间</span><span class="v" id="u-created"></span></div>
+  </div>
+
+  <div class="card">
+    <div class="info-row" style="border-bottom:1px solid #eee;margin-bottom:6px;">
+      <span class="k" style="font-size:13px;color:#333;font-weight:500;">历史昵称</span>
+      <span class="k" id="u-nickcount2"></span>
+    </div>
+    <div id="u-nicklist"></div>
+  </div>
+</div>
+
+<script id="u-data" type="application/json">__U_NICKHIST__</script>
+<script>
+const U = {
+  username: "__U_USERNAME__",
+  nickname: "__U_NICKNAME__",
+  avatar: "__U_AVATAR__",
+  isAdmin: "__U_ADMIN__" === "1",
+  createdAt: parseInt("__U_CREATED__", 10) || 0,
+  msgs: parseInt("__U_MSGS__", 10) || 0,
+  posts: parseInt("__U_POSTS__", 10) || 0
+};
+
+/** 相对时间：刚刚 / N 分钟前 / N 小时前 / N 天前 / 更早显示具体日期 */
+function relTime(ms) {
+  if (!ms || isNaN(ms)) return '';
+  const diff = Date.now() - ms;
+  if (diff < 60000) return '刚刚';
+  if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+  if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+  if (diff < 2592000000) return Math.floor(diff / 86400000) + ' 天前';
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+       + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function fmtDateTime(ms) {
+  if (!ms) return '未知';
+  const d = new Date(ms);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+       + '-' + String(d.getDate()).padStart(2, '0') + ' '
+       + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+function render() {
+  document.getElementById('u-nick').textContent = U.nickname;
+  document.getElementById('u-username').textContent = U.username;
+  document.getElementById('u-created').textContent = fmtDateTime(U.createdAt);
+  document.getElementById('u-msgs').textContent = U.msgs;
+  document.getElementById('u-posts').textContent = U.posts;
+  if (U.isAdmin) document.getElementById('u-admin').style.display = '';
+
+  const av = document.getElementById('u-avatar');
+  if (U.avatar) {
+    const img = document.createElement('img');
+    img.src = U.avatar;
+    img.alt = U.nickname;
+    av.appendChild(img);
+  } else {
+    av.textContent = (U.nickname || U.username).charAt(0).toUpperCase();
+  }
+  document.getElementById('u-sub').textContent = '注册于 ' + relTime(U.createdAt);
+
+  renderHistory();
+}
+
+function renderHistory() {
+  const box = document.getElementById('u-nicklist');
+  let hist = [];
+  try {
+    hist = JSON.parse(document.getElementById('u-data').textContent || '[]');
+  } catch (e) { hist = []; }
+
+  document.getElementById('u-nickcount').textContent = hist.length;
+  document.getElementById('u-nickcount2').textContent = hist.length ? hist.length + ' 条' : '';
+
+  // 当前昵称置顶，后面是历史
+  const rows = [{ nickname: U.nickname, changedAt: 0, cur: true }].concat(hist);
+  if (rows.length === 1 && hist.length === 0) {
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = '还没有改过昵称';
+    box.appendChild(e);
+    return;
+  }
+
+  rows.forEach(function (h) {
+    const item = document.createElement('div');
+    item.className = 'nick-item' + (h.cur ? ' cur' : '');
+
+    const name = document.createElement('span');
+    name.className = 'nick-name';
+    name.textContent = h.nickname || '(空)';
+
+    const time = document.createElement('span');
+    time.className = 'nick-time';
+    time.textContent = h.cur ? '' : relTime(h.changedAt);
+
+    item.appendChild(name);
+    item.appendChild(time);
+    box.appendChild(item);
+  });
+}
+
+render();
+</script></body></html>

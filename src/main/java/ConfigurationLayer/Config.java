@@ -49,6 +49,139 @@ public class Config {
     /** 单个用户可上传的图片条数上限（默认 300） */
     public static final int MAX_IMAGE_COUNT_PER_USER;
 
+    /**
+     * 已加载的配置项。
+     * 保留引用是为了支持"按用途分配额"这类运行期查询——
+     * 键名里带用途（max.image.bytes.per.user.comment），没法预先声明成常量。
+     */
+    private static final Properties PROPS = new Properties();
+
+    /**
+     * 上传用途白名单：只有这些 type 会被接受。
+     *
+     * 注意 file 是"任意文件"，服务端不做内容识别，因此读取时必须强制
+     * 以附件下载（绝不允许内联渲染），详见 ImageHandler.handleGet。
+     */
+    public static final String[] MEDIA_TYPES =
+            {"message", "avatar", "post", "comment", "voice", "anim", "file"};
+
+    /** 聊天里可以出现的消息类型；其它一律归为 text */
+    public static final String[] MESSAGE_TYPES = {"text", "image", "voice", "anim", "file"};
+
+    /** 需要校验"这个附件是不是你上传的"的消息类型（正文即媒体 id） */
+    public static final String[] ATTACHMENT_MESSAGE_TYPES = {"image", "voice", "anim", "file"};
+
+    /**
+     * 消息类型 -> 该消息所用的附件在 images 表里的 type。
+     *
+     * 两者**大多同名**（voice/anim/file），但图片是个例外：
+     * 聊天图片上传时用的用途是 message（配额与保留期都挂在 message 上），
+     * 而消息类型叫 image。校验附件归属时必须按这里的映射取用途，
+     * 否则会把合法的图片全部判为"不属于你"。
+     */
+    public static String uploadTypeForMessage(String messageType) {
+        if ("image".equals(messageType)) return "message";
+        return messageType;
+    }
+
+    /**
+     * 某用途下单个文件的最大字节数。
+     * 文件类附件明显比图片大，但不设上限就等于给了灌满磁盘的入口。
+     */
+    public static long mediaMaxBytes(String type) {
+        String v = PROPS.getProperty("max.media.size." + type);
+        if (v != null) {
+            try {
+                return Long.parseLong(v.trim());
+            } catch (NumberFormatException ignored) {}
+        }
+        switch (type == null ? "" : type) {
+            case "file":  return 20L * 1024 * 1024;    // 20MB
+            default:      return MAX_IMAGE_SIZE;       // 图片/语音/动图沿用旧的单文件上限
+        }
+    }
+
+    /**
+     * 某用途下单个用户的字节上限。
+     *
+     * 查找顺序：max.image.bytes.per.user.&lt;type&gt; → （仅 message/post）旧的通用键 → 按用途默认。
+     *
+     * 通用键只能管 message/post：它当初是为聊天图和帖子图设计的。
+     * 如果让它对所有用途生效，配置文件里那行 max.image.bytes.per.user=200MB
+     * 会把头像的上限也顶成 200MB，按用途区分就失去意义了。
+     */
+    public static long imageBytesLimit(String type) {
+        String v = PROPS.getProperty("max.image.bytes.per.user." + type);
+        if (v == null && usesLegacyKey(type)) v = PROPS.getProperty("max.image.bytes.per.user");
+        if (v == null) return defaultBytesFor(type);
+        try {
+            return Long.parseLong(v.trim());
+        } catch (NumberFormatException e) {
+            return defaultBytesFor(type);
+        }
+    }
+
+    /** 某用途下单个用户的条数上限，查找顺序同上 */
+    public static int imageCountLimit(String type) {
+        String v = PROPS.getProperty("max.image.count.per.user." + type);
+        if (v == null && usesLegacyKey(type)) v = PROPS.getProperty("max.image.count.per.user");
+        if (v == null) return defaultCountFor(type);
+        try {
+            return Integer.parseInt(v.trim());
+        } catch (NumberFormatException e) {
+            return defaultCountFor(type);
+        }
+    }
+
+    /** 该用途是否沿用旧的通用配额键（历史行为） */
+    private static boolean usesLegacyKey(String type) {
+        return "message".equals(type) || "post".equals(type);
+    }
+
+    private static long defaultBytesFor(String type) {
+        switch (type) {
+            case "avatar":  return 5L * 1024 * 1024;      // 头像很小
+            case "comment": return 150L * 1024 * 1024;    // 评论图
+            case "voice":   return 100L * 1024 * 1024;    // 语音
+            case "anim":    return 100L * 1024 * 1024;    // 动态图（未压缩，比静态图大）
+            case "file":    return 500L * 1024 * 1024;    // 文件
+            case "post":    return 200L * 1024 * 1024;    // 帖子图（沿用原默认）
+            default:        return 200L * 1024 * 1024;    // message
+        }
+    }
+
+    private static int defaultCountFor(String type) {
+        switch (type) {
+            case "avatar":  return 10;
+            case "comment": return 200;
+            case "voice":   return 100;
+            case "anim":    return 100;
+            case "file":    return 100;
+            case "post":    return 300;
+            default:        return 300;
+        }
+    }
+
+    /**
+     * 某用途的媒体保留时长（毫秒）。返回 0 表示永久保留。
+     *
+     * 只有聊天相关的（message/voice）会定期清理：聊天记录本身有条数上限，
+     * 消息被裁掉之后对应的媒体留着也没人看得到。
+     * 帖子图和评论图不清理——帖子和评论是长期存在的，图删了会变裂图。
+     */
+    public static long imageRetentionMs(String type) {
+        String v = PROPS.getProperty("image.retention.ms." + type);
+        if (v != null) {
+            try {
+                return Long.parseLong(v.trim());
+            } catch (NumberFormatException ignored) {}
+        }
+        if ("message".equals(type)) return 24L * 3600 * 1000;
+        if ("voice".equals(type)) return 7L * 24 * 3600 * 1000;
+        // 文件是用户有意分享的，永久保留
+        return 0;
+    }
+
     /** SSE 连接空闲多久后自动断开（毫秒，默认 10 分钟），防止挂死的长连接长期占用名额 */
     public static final long SSE_IDLE_TIMEOUT_MS;
 
@@ -62,7 +195,8 @@ public class Config {
     public static final String BIND_ADDRESS = "127.0.0.1";
 
     static {
-        Properties props = new Properties();
+        // 装载进静态 PROPS，供 imageBytesLimit/imageCountLimit 这类按用途查询使用
+        Properties props = PROPS;
 
         if (Files.exists(Paths.get("config.properties"))) {
             try (InputStream is = Files.newInputStream(Paths.get("config.properties"));
