@@ -10,6 +10,7 @@ import InfrastructureLayer.HttpUtil;
 import InfrastructureLayer.IpRateLimiter;
 import InfrastructureLayer.SessionManager;
 import InfrastructureLayer.SseManager;
+import InfrastructureLayer.ScreenShareManager;
 import InfrastructureLayer.TrafficMonitor;
 import com.sun.net.httpserver.*;
 
@@ -47,6 +48,18 @@ public class ChatServer {
      */
     public static final long MAX_BODY_UPLOAD = 25L * 1024 * 1024;
 
+    /**
+     * 屏幕共享接口的请求体上限。
+     * 单帧由 Config.SCREEN_MAX_FRAME_BYTES 把关，这里给足余量即可。
+     */
+    public static final long MAX_BODY_SCREEN = 2L * 1024 * 1024;
+
+    /**
+     * SSE 连接多久没成功写出过数据就算卡死（毫秒）。
+     * 对端半死时写线程会一直阻塞，这条连接既占名额又让在线列表失真。
+     */
+    public static final long SSE_STUCK_TIMEOUT_MS = 60_000;
+
     public static void main(String[] args) throws Exception {
         DatabaseManager.init();
 
@@ -73,6 +86,7 @@ public class ChatServer {
         MessageStore store = new MessageStore(Config.MAX_HISTORY);
         SseManager sse = new SseManager();
         PostStore postStore = new PostStore();
+        ScreenShareManager screen = new ScreenShareManager();
 
         IpRateLimiter limiter = new IpRateLimiter(
                 RATE_LIMIT_PER_MINUTE,
@@ -89,6 +103,7 @@ public class ChatServer {
         AdminHandler adminHandler = new AdminHandler(userStore, store, sessions, sse);
         PostHandler postHandler = new PostHandler(postStore, sessions, userStore, sse);
         UserHandler userHandler = new UserHandler(userStore, sessions);
+        ScreenHandler screenHandler = new ScreenHandler(screen, sessions, userStore, sse);
 
         HttpsServer server = HttpsServer.create(
                 new InetSocketAddress(Config.BIND_ADDRESS, Config.PORT), 0);
@@ -130,6 +145,11 @@ public class ChatServer {
 
         server.createContext("/user",      wrap(userHandler, limiter, MAX_BODY_NORMAL));
 
+        // 屏幕共享。这几个接口刻意**不走通用的每分钟请求数限流**：
+        // 帧提交是每秒 30 次的高频调用，普通的限流窗口会被瞬间打满。
+        // 真正的约束是「只有当前分享者能提交帧」+ 服务端按目标帧率节流。
+        server.createContext("/screen", wrapScreen(screenHandler::handle, limiter, MAX_BODY_SCREEN));
+
         // 前端共用脚本。都是静态资源、不含用户数据：
         //   theme.js  按 localStorage 里的配色偏好注入覆盖样式
         //   media.js  动态图识别与上传（聊天/帖子/评论共用）
@@ -162,6 +182,47 @@ public class ChatServer {
         cleaner.scheduleAtFixedRate(() -> {
             try { TrafficMonitor.printSummary(); } catch (Exception ignored) {}
         }, 5, 5, TimeUnit.MINUTES);
+
+        // 屏幕共享掉线兜底：「同一时刻只能一个人分享」靠占用标记实现，
+        // 分享者如果直接关掉页面（没走 /screen/stop），标记必须有人来收，
+        // 否则别人永远抢不到。这里每 3 秒扫一次，收到就通知所有人。
+        // 屏幕共享掉线兜底。每 3 秒做三件事：
+        // 1) 踢掉心跳超时的观看者；
+        // 2) 把观看人数与"上次广播出去的值"对账——fanOut 写帧失败时会静默移除
+        //    观看者，如果不在这里对账，分享者会一直以为还有人看、继续满帧推流；
+        // 3) 分享者长时间没推帧就释放占用位（他可能直接关掉了页面）。
+        final int[] lastViewerCount = {-1};
+        final int[] lastEpoch = {-1};
+        cleaner.scheduleAtFixedRate(() -> {
+            try {
+                // SSE：踢掉已经写不出去的连接（对端半死时写线程会一直卡着）。
+                // 这些连接不仅会占着名额，还会让在线列表失真。
+                if (sse.sweepStuck(SSE_STUCK_TIMEOUT_MS) > 0) {
+                    try {
+                        StringBuilder sb = new StringBuilder();
+                        for (String u : sse.listOnlineUsers()) {
+                            if (sb.length() > 0) sb.append(',');
+                            sb.append('"').append(HttpUtil.escapeJson(u)).append('"');
+                        }
+                        sse.broadcast("{\"type\":\"online_list\",\"users\":[" + sb + "]}");
+                    } catch (Exception ignored) {}
+                }
+                screen.sweepViewers();
+                int vc = screen.viewerCount();
+                int ep = screen.viewerEpoch();
+                // 人数变了、或发生过静默增减，都广播一次
+                if (vc != lastViewerCount[0] || ep != lastEpoch[0]) {
+                    lastViewerCount[0] = vc;
+                    lastEpoch[0] = ep;
+                    sse.broadcast("{\"type\":\"screen_viewers\",\"viewers\":" + vc + "}");
+                }
+                if (screen.releaseIfStale()) {
+                    sse.broadcast("{\"type\":\"screen_changed\",\"sharing\":false,"
+                            + "\"sharer\":null,\"sharerNickname\":null,"
+                            + "\"viewers\":" + screen.viewerCount() + "}");
+                }
+            } catch (Exception ignored) {}
+        }, 3, 3, TimeUnit.SECONDS);
 
         // 退出前把剩余增量落盘，避免重启丢掉最后几十秒的统计
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
@@ -377,6 +438,45 @@ public class ChatServer {
                 original.handle(ex);
             } catch (HttpUtil.BodyTooLargeException e) {
                 // 流式读取时才发现超限（chunked 等未声明 Content-Length 的请求）
+                try {
+                    HttpUtil.sendJson(ex, 413, "{\"ok\":false,\"msg\":\"请求体过大\"}");
+                } catch (IOException ignored) {}
+            } finally {
+                limiter.exitConcurrent(ip);
+            }
+        };
+    }
+
+    /**
+     * 屏幕共享专用包装：与通用 wrap 的区别是**跳过每分钟请求数限流**。
+     *
+     * 帧提交每秒 30 次，一分钟就是 1800 次，而通用限流是 300 次/分钟/IP——
+     * 走通用包装的话分享一开始就会被自己限流打断。
+     * 这里保留并发计数（长连接确实占资源）与跨站校验。
+     */
+    private static HttpHandler wrapScreen(HttpHandler original, IpRateLimiter limiter, long maxBody) {
+        return ex -> {
+            String ip = getClientIp(ex);
+
+            long contentLength = -1;
+            String cl = ex.getRequestHeaders().getFirst("Content-Length");
+            if (cl != null) {
+                try { contentLength = Long.parseLong(cl); } catch (Exception ignored) {}
+            }
+            if (contentLength > maxBody) {
+                HttpUtil.sendJson(ex, 413, "{\"ok\":false,\"msg\":\"请求体过大\"}");
+                return;
+            }
+
+            if (HttpUtil.rejectCrossSitePost(ex)) return;
+
+            if (!limiter.enterConcurrent(ip)) {
+                HttpUtil.sendJson(ex, 429, "{\"ok\":false,\"msg\":\"并发请求过多，请稍后再试\"}");
+                return;
+            }
+            try {
+                original.handle(ex);
+            } catch (HttpUtil.BodyTooLargeException e) {
                 try {
                     HttpUtil.sendJson(ex, 413, "{\"ok\":false,\"msg\":\"请求体过大\"}");
                 } catch (IOException ignored) {}

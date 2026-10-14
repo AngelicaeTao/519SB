@@ -185,6 +185,49 @@ public class Config {
     /** 自动打开的目标路径，例如 /chat 或 /posts */
     public static final String AUTO_OPEN_PATH;
 
+    // ==================== 屏幕共享 ====================
+    // 方案是「定时截屏推流」而不是 WebRTC：抓屏 → canvas → JPEG → POST 给服务器 →
+    // 服务器用 multipart/x-mixed-replace 转发给观看者。优点是纯 HTTP、能穿 ngrok；
+    // 代价是流量远大于 WebRTC（见 README 的说明），所以要按需调低这些参数。
+
+    /**
+     * 目标帧率（每秒截图数）。
+     *
+     * 默认 15 而不是 30：屏幕内容大部分时间是静止的（看文档、看代码、看演示），
+     * 15 帧看不出差别，但流量直接减半——而这个方案最贵的就是带宽。
+     * 只有屏幕上有视频或快速滚动时才需要调高。
+     */
+    public static final int SCREEN_FPS;
+
+    /** 截图缩放后的最大宽度（像素）。越小越省流量，也越糊。 */
+    public static final int SCREEN_MAX_WIDTH;
+
+    /** JPEG 质量 0.0~1.0。 */
+    public static final double SCREEN_QUALITY;
+
+    /** 同时允许的观看者数量上限。每一路都要服务器复制一份帧，必须设上限。 */
+    public static final int SCREEN_MAX_VIEWERS;
+
+    /**
+     * 多久收不到新帧就认为分享者掉线，自动解除占用（毫秒）。
+     * 「同一时刻只能一个人分享」是靠占用标记实现的，没有这个兜底，
+     * 分享者一断线别人就永远抢不到。
+     */
+    public static final long SCREEN_IDLE_TIMEOUT_MS;
+
+    /** 单帧字节上限，防止有人借这个接口塞超大请求体 */
+    public static final int SCREEN_MAX_FRAME_BYTES;
+
+    /**
+     * 多久收不到观看者的心跳就把它踢掉（毫秒）。
+     *
+     * 为什么需要：观看者如果是异常断开（关笔记本盖子、断网、浏览器被强杀），
+     * TCP 连接会进入半开状态——服务器往这个流写帧时不会立刻报错，
+     * 于是分享者会对着一个已经没人的连接**持续满帧推流**，流量白烧。
+     * 靠观看端定期发一个几百字节的心跳来证明自己还在看，是代价最小的做法。
+     */
+    public static final long SCREEN_VIEWER_TIMEOUT_MS;
+
     /** 服务器只绑定 127.0.0.1，外网通过 ngrok 转发访问 */
     public static final String BIND_ADDRESS = "127.0.0.1";
 
@@ -236,5 +279,35 @@ public class Config {
         AUTO_OPEN_BROWSER = Boolean.parseBoolean(props.getProperty("auto.open.browser", "true"));
         // 默认落在登录页；改成 /chat 或 /posts 可以直接进聊天室或论坛
         AUTO_OPEN_PATH = props.getProperty("auto.open.path", "/login");
+
+        SCREEN_FPS = clampInt(props.getProperty("screen.fps", "15"), 1, 60, 15);
+        SCREEN_MAX_WIDTH = clampInt(props.getProperty("screen.max.width", "1280"), 160, 3840, 1280);
+        SCREEN_QUALITY = clampDouble(props.getProperty("screen.quality", "0.5"), 0.1, 1.0, 0.5);
+        SCREEN_MAX_VIEWERS = clampInt(props.getProperty("screen.max.viewers", "5"), 1, 50, 5);
+        SCREEN_IDLE_TIMEOUT_MS = clampInt(
+                props.getProperty("screen.idle.timeout.ms", "6000"), 1000, 60000, 6000);
+        SCREEN_MAX_FRAME_BYTES = clampInt(
+                props.getProperty("screen.max.frame.bytes", "524288"), 4096, 4 * 1024 * 1024, 524288);
+        SCREEN_VIEWER_TIMEOUT_MS = clampInt(
+                props.getProperty("screen.viewer.timeout.ms", "12000"), 3000, 120000, 12000);
+    }
+
+    /** 读一个范围内的整数，越界或非法就用默认值——配置写错不该让服务起不来 */
+    private static int clampInt(String raw, int min, int max, int fallback) {
+        try {
+            int v = Integer.parseInt(raw.trim());
+            return Math.max(min, Math.min(max, v));
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    private static double clampDouble(String raw, double min, double max, double fallback) {
+        try {
+            double v = Double.parseDouble(raw.trim());
+            return Math.max(min, Math.min(max, v));
+        } catch (Exception e) {
+            return fallback;
+        }
     }
 }

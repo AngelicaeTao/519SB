@@ -121,6 +121,54 @@
     color: #333; flex-shrink: 0;
   }
   #plus-menu button.plus-item:hover { border-color: var(--primary); background: var(--primary-fade); }
+
+  /* ===== 屏幕共享 ===== */
+  /* 有人分享时右下角浮出的提示条 */
+  #screen-notice {
+    position: fixed; right: 16px; bottom: 88px; z-index: 120;
+    display: none; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid #e5e5e5; border-radius: 10px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.16);
+    padding: 10px 14px; font-size: 13px; color: #333; max-width: 80vw;
+  }
+  #screen-notice.show { display: flex; }
+  #screen-notice .sn-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: #e5484d;
+    animation: recPulse 1s infinite; flex-shrink: 0;
+  }
+  #screen-notice .sn-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #screen-notice button {
+    padding: 6px 12px; font-size: 13px; font-family: inherit;
+    border: none; border-radius: 6px; cursor: pointer;
+    background: var(--primary); color: #fff;
+  }
+  #screen-notice button.ghost { background: #fff; color: #666; border: 1px solid #ddd; }
+
+  /* 观看/分享面板 */
+  #screen-panel {
+    position: fixed; inset: 0; z-index: 200;
+    display: none; flex-direction: column;
+    background: rgba(0,0,0,0.92); padding: 16px;
+  }
+  #screen-panel.show { display: flex; }
+  .screen-head {
+    display: flex; align-items: center; gap: 12px;
+    color: #fff; font-size: 14px; padding: 4px 4px 12px;
+  }
+  .screen-head .sc-title { flex: 1; }
+  .screen-head .sc-stats { font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums; }
+  .screen-head button {
+    padding: 6px 12px; font-size: 13px; font-family: inherit;
+    border: 1px solid #555; border-radius: 6px; cursor: pointer;
+    background: transparent; color: #ddd;
+  }
+  .screen-head button:hover { background: #333; color: #fff; }
+  .screen-body {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    min-height: 0; overflow: hidden;
+  }
+  .screen-body img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .screen-body .sc-idle { color: #888; font-size: 14px; }
   .bubble img { max-width: 100%; max-height: 40vh; width: auto; height: auto; border-radius: 4px; display: block; cursor: zoom-in; object-fit: contain; }
 
   /* ===== 语音 ===== */
@@ -508,7 +556,27 @@
   <div id="chat-box">
     <div id="loading-tip">加载中...</div>
   </div>
-  <div id="sidebar-mask" onclick="toggleSidebar(false)"></div>
+  <div id="screen-notice">
+  <span class="sn-dot"></span>
+  <span class="sn-text" id="screen-notice-text"></span>
+  <button id="screen-watch-btn">观看</button>
+  <button id="screen-stop-btn" class="ghost" style="display:none;">停止分享</button>
+</div>
+
+<div id="screen-panel">
+  <div class="screen-head">
+    <span class="sc-title" id="screen-title">屏幕共享</span>
+    <span class="sc-stats" id="screen-stats"></span>
+    <button id="screen-hide-btn">收起</button>
+  </div>
+  <div class="screen-body">
+    <video id="screen-video" muted playsinline style="display:none;max-width:100%;max-height:100%;"></video>
+    <img id="screen-img" alt="屏幕共享画面" style="display:none;">
+    <div class="sc-idle" id="screen-idle">等待画面…</div>
+  </div>
+</div>
+
+<div id="sidebar-mask" onclick="toggleSidebar(false)"></div>
   <div id="sidebar">
     <h3>
       <span>在线用户</span>
@@ -580,6 +648,7 @@
   <div id="plus-menu">
     <button type="button" class="plus-item" data-act="image" title="图片 / 动图">🖼️</button>
     <button type="button" class="plus-item" data-act="file" title="文件">📎</button>
+    <button type="button" class="plus-item" data-act="screen" title="分享屏幕">🖥️</button>
   </div>
   <button id="voice-btn" title="点击开始录音，再点结束并发送">🎤</button>
   <button id="send-btn">发送</button>
@@ -911,6 +980,16 @@ es.onmessage = function (e) {
   // 帖子变动通知与聊天无关。必须显式忽略——下面是 appendMessage 兜底分支，
   // 漏掉这一条会在聊天室里冒出一条空白消息。
   if (data.type === 'posts_changed') {
+    return;
+  }
+  // 屏幕共享状态变动：同样必须在兜底之前处理
+  if (data.type === 'screen_changed') {
+    onScreenChanged(data.sharing, data.sharer, data.sharerNickname, data.viewers);
+    return;
+  }
+  if (data.type === 'screen_viewers') {
+    screenViewers = data.viewers || 0;
+    updateScreenStats();
     return;
   }
   appendMessage(data, false);
@@ -2229,6 +2308,7 @@ plusMenu.querySelectorAll('button[data-act]').forEach(function (b) {
     var act = b.getAttribute('data-act');
     if (act === 'image') imageInput.click();
     else if (act === 'file') fileInput.click();
+    else if (act === 'screen') startScreenShare();
   };
 });
 
@@ -2341,4 +2421,414 @@ function fmtSize(n) {
   if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
   return (n / (1024 * 1024)).toFixed(1) + ' MB';
 }
+
+// ==================== 屏幕共享 ====================
+// 方案是「定时截屏推流」：抓屏 → canvas → JPEG → POST → 服务器转发给观看者。
+// 同一时刻只允许一个人分享，这个约束由**服务端**用占用标记保证，
+// 前端这里的判断只是为了少发一次必然失败的请求。
+var screenSharing = false;        // 是不是我在分享
+var screenSharer = null;          // 当前分享者的账号
+var screenSharerNick = null;      // 当前分享者的昵称
+var screenViewers = 0;            // 观看人数
+var screenWatching = false;       // 我是不是正在看
+var screenStream = null;          // getDisplayMedia 拿到的流
+var screenLoopId = 0;             // 采集循环代号，用来终止旧循环
+var screenSentFrames = 0;         // 统计：已发送帧数
+var screenSentBytes = 0;          // 统计：已发送字节
+var screenStatTimer = null;
+var screenInFlight = false;       // 避免上一帧还没发完就发下一帧
+
+// 采集参数由服务端下发（见 /screen/status），这样两边不会各自写死一套而漂移
+var SCREEN_FPS = 15;
+var SCREEN_MAX_WIDTH = 1280;
+var SCREEN_QUALITY = 0.5;
+// 无观看者时的保活间隔，由服务端下发的空闲超时推算（见 loadScreenStatus）
+var SCREEN_IDLE_INTERVAL_MS = 2000;
+// 观看端心跳间隔，同样由服务端下发
+var SCREEN_VIEWER_PING_MS = 4000;
+var screenViewerPingTimer = null;
+var screenViewId = null;          // 本次观看会话的唯一编号
+
+var screenNotice = document.getElementById('screen-notice');
+var screenNoticeText = document.getElementById('screen-notice-text');
+var screenWatchBtn = document.getElementById('screen-watch-btn');
+var screenStopBtn = document.getElementById('screen-stop-btn');
+var screenPanel = document.getElementById('screen-panel');
+var screenImg = document.getElementById('screen-img');
+var screenVideo = document.getElementById('screen-video');
+var screenIdle = document.getElementById('screen-idle');
+var screenStats = document.getElementById('screen-stats');
+var screenTitle = document.getElementById('screen-title');
+
+function screenSupported() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+}
+
+/** 服务端下发的 screen_changed 事件：更新提示条与面板 */
+function onScreenChanged(sharing, sharer, nickname, viewers) {
+  screenSharer = sharing ? sharer : null;
+  screenSharerNick = sharing ? nickname : null;
+  if (typeof viewers === 'number') screenViewers = viewers;
+
+  var isMe = sharing && sharer === MY_USERNAME;
+  if (isMe) screenSharing = true;
+
+  // 别人停掉分享（或我自己被超时释放）时，把观看中的画面收掉
+  if (!sharing) {
+    screenSharing = false;
+    if (screenWatching) stopWatching();
+    if (screenStream) stopScreenShare(true);   // 服务端已释放，本地只需收尾
+  }
+
+  updateScreenNotice();
+  updateScreenStats();
+}
+
+function updateScreenNotice() {
+  if (screenSharing) {
+    screenNoticeText.textContent = '你正在分享屏幕' + (screenViewers > 0 ? '（' + screenViewers + ' 人在看）' : '');
+    screenWatchBtn.style.display = '';
+    screenStopBtn.style.display = '';
+    screenNotice.classList.add('show');
+    return;
+  }
+  if (screenSharer) {
+    screenNoticeText.textContent = (screenSharerNick || screenSharer) + ' 正在分享屏幕'
+      + (screenViewers > 0 ? '（' + screenViewers + ' 人在看）' : '');
+    screenWatchBtn.style.display = '';
+    screenStopBtn.style.display = 'none';
+    screenNotice.classList.add('show');
+    return;
+  }
+  screenNotice.classList.remove('show');
+}
+
+function updateScreenStats() {
+  if (!screenSharing) { screenStats.textContent = ''; return; }
+  var mb = screenSentBytes / (1024 * 1024);
+  var rate = screenViewers > 0
+    ? '推送中 ' + SCREEN_FPS + ' 帧/秒'
+    : '无人观看，已暂停推送';
+  screenStats.textContent = '已发送 ' + screenSentFrames + ' 帧 / ' + mb.toFixed(1) + ' MB'
+    + '  观看 ' + screenViewers + ' 人  ·  ' + rate;
+}
+
+function showScreenPanel(title) {
+  screenTitle.textContent = title;
+  screenPanel.classList.add('show');
+  updateScreenStats();
+}
+
+// ---------- 分享端 ----------
+
+async function startScreenShare() {
+  if (!screenSupported()) {
+    alert('当前浏览器不支持屏幕共享。请用较新的 Chrome / Edge / Firefox，并确保通过 HTTPS 访问。');
+    return;
+  }
+  if (screenSharing) return;
+
+  // 先向服务器抢占用位。抢不到就直接告诉用户是谁在分享，
+  // 免得先弹出选屏窗口、选完了才发现轮不到自己。
+  var r;
+  try {
+    var res = await fetch('/screen/start?token=' + encodeURIComponent(TOKEN), { method: 'POST' });
+    r = await res.json();
+  } catch (e) {
+    alert('无法连接服务器：' + e.message);
+    return;
+  }
+  if (!r.ok) {
+    alert(r.msg || '已经有其他人在分享屏幕'
+      + (r.sharerNickname ? '\n当前分享者：' + r.sharerNickname : ''));
+    return;
+  }
+
+  // 抢到了占用位。如果用户接下来在选屏窗口点了取消，必须把占用位还回去，
+  // 否则在他超时之前别人都没法分享。
+  var stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: SCREEN_FPS, cursor: 'motion' },
+      audio: false
+    });
+  } catch (e) {
+    await fetch('/screen/stop?token=' + encodeURIComponent(TOKEN), { method: 'POST' });
+    if (e && e.name !== 'NotAllowedError') {
+      alert('无法开始屏幕共享：' + (e.name || e.message));
+    }
+    return;
+  }
+
+  screenStream = stream;
+  screenSharing = true;
+  screenSentFrames = 0;
+  screenSentBytes = 0;
+  screenLoopId++;
+  var myLoop = screenLoopId;
+
+  // 用户在浏览器自带的「停止共享」按钮上点退出时，也要通知服务器
+  stream.getVideoTracks()[0].addEventListener('ended', function () {
+    stopScreenShare(false);
+  });
+
+  showScreenPanel('你正在分享屏幕');
+  showLocalPreview(stream);      // 自己的预览走本地 video，不绕服务器
+  updateScreenNotice();
+
+  var video = document.createElement('video');
+  video.srcObject = stream;
+  video.muted = true;
+  video.playsInline = true;
+  await video.play();
+
+  var canvas = document.createElement('canvas');
+  var ctx = canvas.getContext('2d');
+  var lastSent = 0;
+
+  function loop(ts) {
+    if (myLoop !== screenLoopId) return;      // 已被停止
+
+    var watching = screenViewers > 0;
+
+    // ★ 自适应：
+    //   有人在看 → 按目标帧率推帧，保证画面流畅；
+    //   没人在看 → 只发一个几百字节的心跳续期，**完全不推帧**。
+    //   服务端靠「多久没收到帧」判断分享者是否掉线，没有心跳的话
+    //   一停下来就会被判掉线、占用位被释放。这是整个功能最省流量的一条。
+    if (watching) {
+      var interval = 1000 / Math.max(1, SCREEN_FPS);
+      if (!screenInFlight && ts - lastSent >= interval) {
+        lastSent = ts;
+        captureFrame(video, canvas, ctx, myLoop);
+      }
+    } else if (ts - lastSent >= SCREEN_IDLE_INTERVAL_MS) {
+      lastSent = ts;
+      sendScreenPing(myLoop);
+    }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // 每秒刷新一次统计
+  var statTick = 0;
+  screenStatTimer = setInterval(function () {
+    updateScreenStats();
+    // 每 5 秒与服务端对一次账。相当于第二道保险：
+    // 万一 screen_viewers 事件丢了（SSE 断线重连、广播竞态），
+    // 分享者不会一直以为还有人看而白白空推流量。
+    if (++statTick % 5 === 0) resyncScreenViewers();
+  }, 1000);
+}
+
+/** 主动向服务端核对观看人数（低频，几百字节） */
+async function resyncScreenViewers() {
+  if (!screenSharing) return;
+  try {
+    var res = await fetch('/screen/status?token=' + encodeURIComponent(TOKEN));
+    var r = await res.json();
+    if (!r.ok) return;
+    if (!r.sharing) { onScreenChanged(false, null, null, 0); return; }
+    if (typeof r.viewers === 'number' && r.viewers !== screenViewers) {
+      screenViewers = r.viewers;
+      updateScreenNotice();
+      updateScreenStats();
+    }
+  } catch (e) { /* 对账失败不影响推流，下一轮再试 */ }
+}
+
+/** 分享者自己的预览：直接用本地采集流，不经过服务器（省掉一整路流量） */
+function showLocalPreview(stream) {
+  screenImg.onerror = null;
+  screenImg.removeAttribute('src');
+  screenImg.style.display = 'none';
+  screenIdle.style.display = 'none';
+  screenVideo.srcObject = stream;
+  screenVideo.style.display = '';
+  screenVideo.play().catch(function () { /* 自动播放被拦，用户点一下即可 */ });
+}
+
+function hideLocalPreview() {
+  try { screenVideo.pause(); } catch (e) {}
+  screenVideo.srcObject = null;
+  screenVideo.style.display = 'none';
+}
+
+/** 空闲期的心跳：只续期，不发帧 */
+function sendScreenPing(myLoop) {
+  fetch('/screen/ping?token=' + encodeURIComponent(TOKEN), { method: 'POST' })
+    .then(function (res) {
+      // 409 = 服务端已经把我释放了（多半是超时），本地收尾
+      if (res.status === 409 && myLoop === screenLoopId) stopScreenShare(true);
+    })
+    .catch(function () { /* 网络抖动忽略，下一次心跳再试 */ });
+}
+
+function captureFrame(video, canvas, ctx, myLoop) {
+  var vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;                     // 还没拿到第一帧
+
+  // 按配置缩放到目标宽度：这是省流量最有效的一环
+  var w = Math.min(vw, SCREEN_MAX_WIDTH);
+  var h = Math.max(1, Math.round(vh * w / vw));
+  if (canvas.width !== w || canvas.height !== h) {
+    canvas.width = w;
+    canvas.height = h;
+  }
+  ctx.drawImage(video, 0, 0, w, h);
+
+  screenInFlight = true;
+  canvas.toBlob(function (blob) {
+    if (!blob || myLoop !== screenLoopId) { screenInFlight = false; return; }
+    fetch('/screen/frame?token=' + encodeURIComponent(TOKEN), { method: 'POST', body: blob })
+      .then(function (res) {
+        if (res.status === 409) {
+          // 服务端说我已经不是分享者了（通常是超时被释放）——本地收尾
+          screenInFlight = false;
+          stopScreenShare(true);
+          return null;
+        }
+        return res.text();
+      })
+      .then(function () {
+        screenSentFrames++;
+        screenSentBytes += blob.size;
+      })
+      .catch(function () { /* 偶发网络抖动忽略，下一帧继续 */ })
+      .finally(function () { screenInFlight = false; });
+  }, 'image/jpeg', SCREEN_QUALITY);
+}
+
+/** 停止分享。alreadyReleased=true 表示服务端那边已经释放过了，不用再调 stop */
+async function stopScreenShare(alreadyReleased) {
+  if (!screenSharing && !screenStream) return;
+
+  screenLoopId++;                 // 让采集循环自然退出
+  screenSharing = false;
+  screenInFlight = false;
+
+  if (screenStatTimer) { clearInterval(screenStatTimer); screenStatTimer = null; }
+
+  if (screenStream) {
+    screenStream.getTracks().forEach(function (t) { t.stop(); });
+    screenStream = null;
+  }
+  hideLocalPreview();
+  if (screenWatching) stopWatching();
+
+  if (!alreadyReleased) {
+    try { await fetch('/screen/stop?token=' + encodeURIComponent(TOKEN), { method: 'POST' }); }
+    catch (e) { /* 服务端有超时兜底，这里失败不影响 */ }
+  }
+
+  screenSentFrames = 0;
+  screenSentBytes = 0;
+  updateScreenNotice();
+  updateScreenStats();
+}
+
+// ---------- 观看端 ----------
+
+function watchScreen() {
+  if (!screenSharer && !screenSharing) { alert('当前没有人在分享屏幕'); return; }
+
+  // 自己分享时，「观看」就是看本地预览——绝不绕服务器再拉一路流回来，
+  // 那等于自己给自己制造一份出口流量，还会把自己算进观看人数，
+  // 导致"无人观看时暂停推送"永远不生效。
+  if (screenSharing) {
+    showScreenPanel('你正在分享屏幕');
+    if (screenStream) showLocalPreview(screenStream);
+    return;
+  }
+
+  screenWatching = true;
+  // 每次观看生成一个唯一编号，随观看流和心跳一起发给服务器。
+  // 心跳必须能精确定位"这一次观看"：如果只按用户名续期，同一个人刷新页面留下的
+  // 僵尸连接会被新连接一起续期，永远清不掉，分享者就会一直以为有人看。
+  screenViewId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+  // 直接用一个 <img> 拉 multipart/x-mixed-replace 流，浏览器原生支持，
+  // 不需要在 JS 里逐帧解码，也不占额外的 JS 内存。
+  screenImg.src = '/screen/stream?token=' + encodeURIComponent(TOKEN)
+    + '&vid=' + encodeURIComponent(screenViewId) + '&t=' + Date.now();
+  screenImg.style.display = '';
+  screenIdle.style.display = 'none';
+  screenImg.onerror = function () {
+    screenIdle.textContent = '画面已结束';
+    screenIdle.style.display = '';
+    screenImg.style.display = 'none';
+  };
+  showScreenPanel((screenSharerNick || screenSharer) + ' 的屏幕');
+  startViewerPing();
+}
+
+/**
+ * 观看期间定期发一个几百字节的心跳。
+ *
+ * 作用：证明"我还在看"。如果我异常断开（断网、关盖子、浏览器被强杀），
+ * 服务器往我的流写帧不会立刻报错，会一直把我算作观看者，
+ * 分享者就会对着一个已经没人的连接持续满帧推流。
+ * 我的心跳一停，服务器几秒后就我踢掉，分享者随即停推。
+ */
+function startViewerPing() {
+  stopViewerPing();
+  screenViewerPingTimer = setInterval(function () {
+    if (!screenWatching) { stopViewerPing(); return; }
+    fetch('/screen/viewer-ping?token=' + encodeURIComponent(TOKEN)
+          + '&vid=' + encodeURIComponent(screenViewId || ''), { method: 'POST' })
+      .catch(function () { /* 抖动忽略，下一拍再试 */ });
+  }, SCREEN_VIEWER_PING_MS);
+}
+
+function stopViewerPing() {
+  if (screenViewerPingTimer) {
+    clearInterval(screenViewerPingTimer);
+    screenViewerPingTimer = null;
+  }
+}
+
+function stopWatching() {
+  screenWatching = false;
+  stopViewerPing();
+  // 先摘掉 onerror，再清 src：清 src 本身也会触发一次 error，
+  // 不摘的话会把「等待画面」覆盖成「画面已结束」。
+  screenImg.onerror = null;
+  screenImg.removeAttribute('src');
+  screenImg.style.display = 'none';
+  screenIdle.textContent = '等待画面…';
+  screenIdle.style.display = '';
+  screenStats.textContent = '';
+}
+
+/**
+ * 拉一次服务端状态。
+ * 两个作用：拿到采集参数（帧率/宽度/质量），以及**刷新页面后知道现在是否已经有人在分享**。
+ */
+async function loadScreenStatus() {
+  try {
+    var res = await fetch('/screen/status?token=' + encodeURIComponent(TOKEN));
+    var r = await res.json();
+    if (!r.ok) return;
+    if (r.fps) SCREEN_FPS = r.fps;
+    if (r.maxWidth) SCREEN_MAX_WIDTH = r.maxWidth;
+    if (typeof r.quality === 'number') SCREEN_QUALITY = r.quality;
+    // 保活间隔取空闲超时的 1/3：既不会被判定掉线，也不至于推得太勤
+    if (r.idleTimeoutMs) {
+      SCREEN_IDLE_INTERVAL_MS = Math.max(1000, Math.round(r.idleTimeoutMs / 3));
+    }
+    // 观看端心跳间隔同样留 3 倍余量
+    if (r.viewerTimeoutMs) {
+      SCREEN_VIEWER_PING_MS = Math.max(1000, Math.round(r.viewerTimeoutMs / 3));
+    }
+    onScreenChanged(!!r.sharing, r.sharer, r.sharerNickname, r.viewers);
+  } catch (e) { /* 状态拉不到就不显示提示条，不影响聊天 */ }
+}
+loadScreenStatus();
+
+screenWatchBtn.onclick = function () { watchScreen(); };
+screenStopBtn.onclick = function () { stopScreenShare(false); };
+document.getElementById('screen-hide-btn').onclick = function () {
+  screenPanel.classList.remove('show');
+  // 收起面板时如果不在分享，就顺便断开观看连接，避免白白占带宽
+  if (!screenSharing) stopWatching();
+};
 </script></body></html>

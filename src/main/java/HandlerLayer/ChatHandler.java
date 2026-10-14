@@ -179,14 +179,14 @@ public class ChatHandler {
 
         try {
             // 回放历史。即使某条写入失败也不要让整个连接倒掉。
-            try {
-                for (String msg : store.recent(INITIAL_HISTORY)) {
-                    sse.sendTo(os, msg);
-                }
-                os.write("data: {\"type\":\"history_end\"}\n\n".getBytes(StandardCharsets.UTF_8));
-                os.flush();
-            } catch (IOException ignored) {
+            //
+            // 注意：bind 之后**不能**再直接写 os —— 这个流已经交给 SseManager
+            // 里该客户端的写线程，两个写者会把 SSE 帧写串。
+            // 所有输出一律走 sendTo / sendComment。
+            for (String msg : store.recent(INITIAL_HISTORY)) {
+                sse.sendTo(os, msg);
             }
+            sse.sendTo(os, "{\"type\":\"history_end\"}");
 
             // 无论历史是否成功，都要广播一次在线列表
             broadcastOnlineList();
@@ -198,8 +198,7 @@ public class ChatHandler {
                 if (sse.idleMillis(os) > idleTimeout) {
                     break;
                 }
-                os.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
-                os.flush();
+                sse.sendComment(os, "keepalive");
             }
         } catch (Exception e) {
         } finally {
