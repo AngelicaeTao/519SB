@@ -19,6 +19,22 @@ public class MessageStore {
     }
 
     public long add(String username, String text, String time, String type) {
+        return add(username, text, time, type, null, null);
+    }
+
+    public long add(String username, String text, String time, String type, String replyJson) {
+        return add(username, text, time, type, replyJson, null);
+    }
+
+    /**
+     * 插入消息。
+     *
+     * @param replyJson 回复引用的摘要 JSON（{"id":1,"author":"..","text":".."}）。
+     *                  由调用方负责转义后传入，这里按原文存；无引用时传 null。
+     * @param fileName  文件消息的原始文件名（已由调用方净化）；非文件消息传 null。
+     */
+    public long add(String username, String text, String time, String type,
+                    String replyJson, String fileName) {
         if (username == null) username = "";
         if (text == null) text = "";
         if (time == null) time = "";
@@ -29,13 +45,18 @@ public class MessageStore {
 
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "INSERT INTO messages(username, text, time, type, created_at) VALUES(?,?,?,?,?)",
+                     "INSERT INTO messages(username, text, time, type, created_at, reply, filename) " +
+                             "VALUES(?,?,?,?,?,?,?)",
                      Statement.RETURN_GENERATED_KEYS)) {
             ps.setString(1, username);
             ps.setString(2, text);
             ps.setString(3, time);
             ps.setString(4, type);
             ps.setLong(5, now);
+            if (replyJson == null || replyJson.isEmpty()) ps.setNull(6, java.sql.Types.VARCHAR);
+            else ps.setString(6, replyJson);
+            if (fileName == null || fileName.isEmpty()) ps.setNull(7, java.sql.Types.VARCHAR);
+            else ps.setString(7, fileName);
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) newId = rs.getLong(1);
@@ -61,7 +82,7 @@ public class MessageStore {
     }
 
     public List<String> recent(int limit) {
-        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, m.created_at, " +
+        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, m.created_at, m.reply, m.filename, " +
                 "COALESCE(u.nickname, m.username) AS nickname, u.avatar_id " +
                 "FROM messages m LEFT JOIN users u ON m.username = u.username " +
                 "ORDER BY m.id DESC LIMIT ?";
@@ -69,7 +90,7 @@ public class MessageStore {
     }
 
     public List<String> loadBefore(long beforeId, int limit) {
-        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, m.created_at, " +
+        String sql = "SELECT m.id, m.username, m.text, m.time, m.type, m.created_at, m.reply, m.filename, " +
                 "COALESCE(u.nickname, m.username) AS nickname, u.avatar_id " +
                 "FROM messages m LEFT JOIN users u ON m.username = u.username " +
                 "WHERE m.id < ? ORDER BY m.id DESC LIMIT ?";
@@ -79,38 +100,44 @@ public class MessageStore {
         });
     }
 
-    /** 抽取公共查询：出错时降级为不带 created_at 的查询，确保历史至少能出来 */
+    /**
+     * 抽取公共查询：逐级降级，保证老库也能读出历史。
+     *
+     * 四级分别是：正常查询 → 老库没有 filename 列 → 没有 reply 列
+     * → 连 created_at 也没有。
+     * 每级都保证结果集里一定有 created_at / reply / filename 三列，
+     * 这样 rowToJson 读取时不会因为缺列抛异常。
+     */
     private interface Binder { void bind(PreparedStatement ps) throws SQLException; }
 
     private List<String> queryList(String sql, Binder binder) {
-        List<String> result = new ArrayList<>();
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-            binder.bind(ps);
-            try (ResultSet rs = ps.executeQuery()) {
-                List<String> reversed = new ArrayList<>();
-                while (rs.next()) reversed.add(rowToJson(rs, true));
-                for (int i = reversed.size() - 1; i >= 0; i--) result.add(reversed.get(i));
-            }
-            return result;
-        } catch (SQLException e) {
-            // 旧库没有 created_at 列：降级查询
-            System.err.println("[MessageStore] 带 created_at 查询失败，尝试降级：" + e.getMessage());
-        }
+        String noFilename = sql.replace("m.created_at, m.reply, m.filename,",
+                "m.created_at, m.reply, NULL AS filename,");
+        String[] variants = {
+                sql,
+                noFilename,
+                noFilename.replace("m.created_at, m.reply,", "m.created_at, NULL AS reply,"),
+                noFilename.replace("m.created_at, m.reply,", "0 AS created_at, NULL AS reply,")
+        };
 
-        String fallback = sql.replace("m.created_at,", "0 AS created_at,");
-        try (Connection conn = DatabaseManager.getConnection();
-             PreparedStatement ps = conn.prepareStatement(fallback)) {
-            binder.bind(ps);
-            try (ResultSet rs = ps.executeQuery()) {
-                List<String> reversed = new ArrayList<>();
-                while (rs.next()) reversed.add(rowToJson(rs, false));
-                for (int i = reversed.size() - 1; i >= 0; i--) result.add(reversed.get(i));
+        SQLException last = null;
+        for (String variant : variants) {
+            try (Connection conn = DatabaseManager.getConnection();
+                 PreparedStatement ps = conn.prepareStatement(variant)) {
+                binder.bind(ps);
+                List<String> result = new ArrayList<>();
+                try (ResultSet rs = ps.executeQuery()) {
+                    List<String> reversed = new ArrayList<>();
+                    while (rs.next()) reversed.add(rowToJson(rs, true));
+                    for (int i = reversed.size() - 1; i >= 0; i--) result.add(reversed.get(i));
+                }
+                return result;
+            } catch (SQLException e) {
+                last = e;
             }
-        } catch (SQLException e2) {
-            System.err.println("[MessageStore] 降级查询也失败：" + e2.getMessage());
         }
-        return result;
+        System.err.println("[MessageStore] 查询消息失败：" + (last == null ? "unknown" : last.getMessage()));
+        return new ArrayList<>();
     }
 
     public boolean recall(long id, String username, long maxAgeMs) {
@@ -187,6 +214,11 @@ public class MessageStore {
         if (hasCreatedAt) {
             try { createdAt = rs.getLong("created_at"); } catch (SQLException ignored) {}
         }
+        // reply 列里存的是生产者已转义好的 JSON 片段，或 NULL；两种都能直接拼
+        String reply = null;
+        try { reply = rs.getString("reply"); } catch (SQLException ignored) {}
+        String fileName = null;
+        try { fileName = rs.getString("filename"); } catch (SQLException ignored) {}
         return "{\"id\":" + rs.getLong("id")
                 + ",\"createdAt\":" + createdAt
                 + ",\"username\":\"" + HttpUtil.escapeJson(rs.getString("username"))
@@ -194,6 +226,10 @@ public class MessageStore {
                 + "\",\"avatarId\":" + (avatarId == null ? "null" : "\"" + HttpUtil.escapeJson(avatarId) + "\"")
                 + ",\"text\":\"" + HttpUtil.escapeJson(rs.getString("text"))
                 + "\",\"time\":\"" + HttpUtil.escapeJson(rs.getString("time"))
-                + "\",\"type\":\"" + HttpUtil.escapeJson(rs.getString("type")) + "\"}";
+                + "\",\"type\":\"" + HttpUtil.escapeJson(rs.getString("type"))
+                + "\",\"reply\":" + (reply == null || reply.isEmpty() ? "null" : reply)
+                + ",\"fileName\":" + (fileName == null || fileName.isEmpty()
+                        ? "null" : "\"" + HttpUtil.escapeJson(fileName) + "\"")
+                + "}";
     }
 }

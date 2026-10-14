@@ -68,8 +68,71 @@ public class PostStore {
         return result;
     }
 
-    public boolean update(long id, String title, String content, String images) {
-        String sql = "UPDATE posts SET title = ?, content = ?, updated_at = ?, images = ? WHERE id = ?";
+    /**
+     * 搜索帖子。
+     *
+     * @param q     关键词
+     * @param field all / title / content / author；其他值按 all 处理
+     * @param limit 返回条数上限
+     *
+     * 作者检索同时匹配账号和昵称——使用者通常只记得昵称。
+     * 关键词里的 % 和 _ 会被转义，否则用户输入一个 % 就会匹配到全部帖子。
+     */
+    public List<Post> search(String q, String field, int limit) {
+        List<Post> result = new ArrayList<>();
+        if (q == null || q.isBlank()) return result;
+        if (limit <= 0 || limit > 200) limit = 50;
+
+        String like = escapeLike(q.trim());
+        String cols = "SELECT p.id, p.title, p.content, p.author, p.created_at, p.updated_at, p.views, p.images, "
+                + "COALESCE(u.nickname, p.author) AS author_nickname, "
+                + "(SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) AS like_count "
+                + "FROM posts p LEFT JOIN users u ON p.author = u.username ";
+
+        String where;
+        int params;
+        switch (field == null ? "all" : field) {
+            case "title" -> {
+                where = "WHERE p.title LIKE ? ESCAPE '\\' ";
+                params = 1;
+            }
+            case "content" -> {
+                where = "WHERE p.content LIKE ? ESCAPE '\\' ";
+                params = 1;
+            }
+            case "author" -> {
+                where = "WHERE (p.author LIKE ? ESCAPE '\\' OR COALESCE(u.nickname, p.author) LIKE ? ESCAPE '\\') ";
+                params = 2;
+            }
+            default -> {
+                where = "WHERE (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' "
+                        + "OR p.author LIKE ? ESCAPE '\\' OR COALESCE(u.nickname, p.author) LIKE ? ESCAPE '\\') ";
+                params = 4;
+            }
+        }
+
+        String sql = cols + where + "ORDER BY p.id DESC LIMIT ?";
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            String pattern = "%" + like + "%";
+            int idx = 1;
+            for (int i = 0; i < params; i++) ps.setString(idx++, pattern);
+            ps.setInt(idx, limit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) result.add(map(rs));
+            }
+        } catch (SQLException e) {
+            System.err.println("[PostStore] 搜索帖子失败：" + e.getMessage());
+        }
+        return result;
+    }
+
+    /** 转义 LIKE 的通配符，让它们按字面量匹配 */
+    private static String escapeLike(String s) {
+        return s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+    }
+
+    public boolean update(long id, String title, String content, String images) {        String sql = "UPDATE posts SET title = ?, content = ?, updated_at = ?, images = ? WHERE id = ?";
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, title);
@@ -189,8 +252,18 @@ public class PostStore {
     // ==================== 评论 ====================
 
     public long addComment(long postId, String username, String content, Long parentId) {
-        String sql = "INSERT INTO post_comments(post_id, username, content, parent_id, created_at) " +
-                "VALUES(?,?,?,?,?)";
+        return addComment(postId, username, content, parentId, null);
+    }
+
+    /**
+     * 发表评论。
+     *
+     * @param imagesJson 配图 id 的 JSON 数组（如 ["ab12...","cd34..."]）；
+     *                   由调用方校验 id 归属后传入，这里按原文存。
+     */
+    public long addComment(long postId, String username, String content, Long parentId, String imagesJson) {
+        String sql = "INSERT INTO post_comments(post_id, username, content, parent_id, created_at, images) " +
+                "VALUES(?,?,?,?,?,?)";
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setLong(1, postId);
@@ -199,6 +272,8 @@ public class PostStore {
             if (parentId == null) ps.setNull(4, Types.INTEGER);
             else ps.setLong(4, parentId);
             ps.setLong(5, System.currentTimeMillis());
+            if (imagesJson == null || imagesJson.isEmpty()) ps.setNull(6, Types.VARCHAR);
+            else ps.setString(6, imagesJson);
             ps.executeUpdate();
             try (ResultSet rs = ps.getGeneratedKeys()) {
                 if (rs.next()) return rs.getLong(1);
@@ -226,7 +301,7 @@ public class PostStore {
     /** 查帖子所有评论（带 parentId、昵称、头像、被回复者昵称），按 id 升序 */
     public List<String> listComments(long postId) {
         List<String> result = new ArrayList<>();
-        String sql = "SELECT c.id, c.username, c.content, c.parent_id, c.created_at, " +
+        String sql = "SELECT c.id, c.username, c.content, c.parent_id, c.created_at, c.images, " +
                 "COALESCE(u.nickname, c.username) AS nickname, u.avatar_id, " +
                 "(SELECT COALESCE(u2.nickname, c2.username) FROM post_comments c2 " +
                 " LEFT JOIN users u2 ON c2.username = u2.username " +
@@ -242,6 +317,9 @@ public class PostStore {
                     long parentId = rs.getLong("parent_id");
                     boolean parentIsNull = rs.wasNull();
                     String replyToNick = rs.getString("reply_to_nick");
+                    // images 列存的是已校验过的 id 数组 JSON，直接内嵌
+                    String images = null;
+                    try { images = rs.getString("images"); } catch (SQLException ignored) {}
                     String json = "{\"id\":" + rs.getLong("id")
                             + ",\"username\":\"" + InfrastructureLayer.HttpUtil.escapeJson(rs.getString("username")) + "\""
                             + ",\"nickname\":\"" + InfrastructureLayer.HttpUtil.escapeJson(rs.getString("nickname")) + "\""
@@ -249,6 +327,7 @@ public class PostStore {
                             + ",\"content\":\"" + InfrastructureLayer.HttpUtil.escapeJson(rs.getString("content")) + "\""
                             + ",\"parentId\":" + (parentIsNull ? "null" : parentId)
                             + ",\"replyToNick\":" + (replyToNick == null ? "null" : "\"" + InfrastructureLayer.HttpUtil.escapeJson(replyToNick) + "\"")
+                            + ",\"images\":" + (images == null || images.isBlank() ? "[]" : images)
                             + ",\"createdAt\":" + rs.getLong("created_at") + "}";
                     result.add(json);
                 }

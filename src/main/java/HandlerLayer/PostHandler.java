@@ -1,11 +1,13 @@
 package HandlerLayer;
 
+import DataLayer.ImageStore;
 import DataLayer.Post;
 import DataLayer.PostStore;
 import DataLayer.User;
 import DataLayer.UserStore;
 import InfrastructureLayer.HttpUtil;
 import InfrastructureLayer.SessionManager;
+import InfrastructureLayer.SseManager;
 import ViewLayer.PostPage;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -19,14 +21,33 @@ import java.util.regex.Pattern;
 /** 帖子：页面 + API */
 public class PostHandler implements HttpHandler {
 
+    /** 一条评论最多带几张图 */
+    private static final int MAX_COMMENT_IMAGES = 3;
+
     private final PostStore postStore;
     private final SessionManager sessions;
     private final UserStore userStore;
+    private final SseManager sse;
 
-    public PostHandler(PostStore postStore, SessionManager sessions, UserStore userStore) {
+    public PostHandler(PostStore postStore, SessionManager sessions, UserStore userStore, SseManager sse) {
         this.postStore = postStore;
         this.sessions = sessions;
         this.userStore = userStore;
+        this.sse = sse;
+    }
+
+    /** 通知所有客户端帖子有变动，让帖子列表自动刷新 */
+    private void notifyPostsChanged(String action, long postId) {
+        if (sse != null) sse.broadcastPostsChanged(action, postId);
+    }
+
+    /** 当前登录用户的配色主题；未登录或没设过返回 null（默认配色） */
+    private String currentTheme(HttpExchange ex) {
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String username = sessions.getUser(token);
+        if (username == null) return null;
+        User u = userStore.getUser(username);
+        return (u == null) ? null : u.theme;
     }
 
     @Override
@@ -40,7 +61,7 @@ public class PostHandler implements HttpHandler {
 
         if (path.equals("/posts") || path.equals("/posts/")) {
             if ("GET".equalsIgnoreCase(ex.getRequestMethod())) {
-                HttpUtil.sendHtml(ex, 200, PostPage.LIST_HTML);
+                HttpUtil.sendHtmlThemed(ex, 200, PostPage.LIST_HTML, currentTheme(ex));
             } else {
                 ex.sendResponseHeaders(405, -1);
                 ex.close();
@@ -52,7 +73,7 @@ public class PostHandler implements HttpHandler {
             String rest = path.substring("/posts/".length());
             if (rest.matches("\\d+") && "GET".equalsIgnoreCase(ex.getRequestMethod())) {
                 long id = Long.parseLong(rest);
-                HttpUtil.sendHtml(ex, 200, PostPage.detailHtml(id));
+                HttpUtil.sendHtmlThemed(ex, 200, PostPage.detailHtml(id), currentTheme(ex));
             } else {
                 ex.sendResponseHeaders(404, -1);
                 ex.close();
@@ -75,6 +96,7 @@ public class PostHandler implements HttpHandler {
         }
 
         if (path.equals("/api/posts") && "POST".equalsIgnoreCase(method)) { handleCreate(ex); return; }
+        if (path.equals("/api/posts/search") && "GET".equalsIgnoreCase(method)) { handleSearch(ex); return; }
         if (path.equals("/api/posts/update") && "POST".equalsIgnoreCase(method)) { handleUpdate(ex); return; }
         if (path.equals("/api/posts/delete") && "POST".equalsIgnoreCase(method)) { handleDelete(ex); return; }
         if (path.equals("/api/posts/like") && "POST".equalsIgnoreCase(method)) { handleToggleLike(ex); return; }
@@ -88,6 +110,39 @@ public class PostHandler implements HttpHandler {
     private void handleList(HttpExchange ex) throws IOException {
         List<Post> posts = postStore.listAll();
         StringBuilder sb = new StringBuilder("{\"ok\":true,\"posts\":[");
+        for (int i = 0; i < posts.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append(toJson(posts.get(i)));
+        }
+        sb.append("]}");
+        HttpUtil.sendJson(ex, 200, sb.toString());
+    }
+
+    /**
+     * GET /api/posts/search?q=关键词&field=all|title|content|author
+     *
+     * 只读接口，不需要登录。关键词长度限制避免超长串拖慢 LIKE。
+     */
+    private void handleSearch(HttpExchange ex) throws IOException {
+        String query = ex.getRequestURI().getQuery();
+        String q = HttpUtil.getQueryParam(query, "q");
+        String field = HttpUtil.getQueryParam(query, "field");
+
+        if (q == null || q.isBlank()) {
+            HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"posts\":[],\"q\":\"\"}");
+            return;
+        }
+        if (q.length() > 60) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"关键词最多 60 字\"}");
+            return;
+        }
+        if (field == null || field.isBlank()) field = "all";
+
+        List<Post> posts = postStore.search(q, field, 50);
+        StringBuilder sb = new StringBuilder("{\"ok\":true,\"q\":\"")
+                .append(HttpUtil.escapeJson(q)).append("\"")
+                .append(",\"field\":\"").append(HttpUtil.escapeJson(field)).append("\"")
+                .append(",\"posts\":[");
         for (int i = 0; i < posts.size(); i++) {
             if (i > 0) sb.append(",");
             sb.append(toJson(posts.get(i)));
@@ -145,6 +200,7 @@ public class PostHandler implements HttpHandler {
 
         long id = postStore.create(title.trim(), content, username, imagesJson);
         if (id > 0) {
+            notifyPostsChanged("create", id);
             HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"id\":" + id + "}");
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"发帖失败\"}");
@@ -187,6 +243,7 @@ public class PostHandler implements HttpHandler {
         String imagesJson = parseImagesJson(body);
 
         if (postStore.update(id, title.trim(), content, imagesJson)) {
+            notifyPostsChanged("update", id);
             HttpUtil.sendJson(ex, 200, "{\"ok\":true}");
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"更新失败\"}");
@@ -218,6 +275,7 @@ public class PostHandler implements HttpHandler {
         }
 
         if (postStore.delete(id)) {
+            notifyPostsChanged("delete", id);
             HttpUtil.sendJson(ex, 200, "{\"ok\":true}");
         } else {
             HttpUtil.sendJson(ex, 500, "{\"ok\":false,\"msg\":\"删除失败\"}");
@@ -325,15 +383,37 @@ public class PostHandler implements HttpHandler {
         Long postId = extractLong(body, "postId");
         Long parentId = extractLong(body, "parentId");
         String content = HttpUtil.extractJsonString(body, "content");
+        List<String> imageIds = HttpUtil.extractJsonStringArray(body, "images");
 
-        if (postId == null || content == null || content.isBlank()) {
+        if (content == null) content = "";
+        content = content.trim();
+
+        // 有图就可以不带文字，但两者不能都空
+        if (content.isBlank() && imageIds.isEmpty()) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"评论内容不能为空\"}");
+            return;
+        }
+        if (postId == null) {
+            HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"缺少 postId\"}");
             return;
         }
         if (content.length() > 500) {
             HttpUtil.sendJson(ex, 400, "{\"ok\":false,\"msg\":\"评论最多 500 字\"}");
             return;
         }
+        if (imageIds.size() > MAX_COMMENT_IMAGES) {
+            HttpUtil.sendJson(ex, 400,
+                    "{\"ok\":false,\"msg\":\"一条评论最多 " + MAX_COMMENT_IMAGES + " 张图\"}");
+            return;
+        }
+
+        // 配图必须确实属于提交者且用途为 comment——
+        // 否则可以拿别人的图片 id 把别人的图挂到自己的评论下
+        if (!ImageStore.ownsAll(username, imageIds, "comment")) {
+            HttpUtil.sendJson(ex, 403, "{\"ok\":false,\"msg\":\"配图无效或不属于你\"}");
+            return;
+        }
+
         if (postStore.getById(postId) == null) {
             HttpUtil.sendJson(ex, 404, "{\"ok\":false,\"msg\":\"帖子不存在\"}");
             return;
@@ -343,7 +423,8 @@ public class PostHandler implements HttpHandler {
             return;
         }
 
-        long id = postStore.addComment(postId, username, content, parentId);
+        String imagesJson = imageIds.isEmpty() ? null : HttpUtil.toJsonArray(imageIds);
+        long id = postStore.addComment(postId, username, content, parentId, imagesJson);
         if (id > 0) {
             HttpUtil.sendJson(ex, 200, "{\"ok\":true,\"id\":" + id + "}");
         } else {

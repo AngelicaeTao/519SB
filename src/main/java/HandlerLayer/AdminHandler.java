@@ -46,7 +46,7 @@ public class AdminHandler {
             ex.close();
             return;
         }
-        HttpUtil.sendHtml(ex, 200, AdminPage.HTML);
+        HttpUtil.sendHtmlThemed(ex, 200, AdminPage.HTML, u.theme);
     }
 
     public void handleListUsers(HttpExchange ex) throws IOException {

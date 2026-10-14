@@ -120,10 +120,27 @@ public class SseManager {
                     os.write(payload);
                     os.flush();
                 }
+                // 流量统计：SSE 推送按接收方归属
+                TrafficMonitor.accountOut(e.getValue(), payload.length);
             } catch (IOException ex) {
                 removeQuietly(os);
             }
         }
+    }
+
+    /**
+     * 通知所有客户端「帖子有变动」，供帖子列表自动刷新。
+     *
+     * 注意：所有 SSE 消息都以 data.type 区分，聊天室客户端对未知 type 会
+     * 兜底当成聊天消息渲染。所以新增事件类型时，必须同步在 chat.html 里
+     * 加一条忽略分支，否则会在聊天室冒出一条空消息。
+     *
+     * @param action create / update / delete
+     * @param postId 相关帖子 id；未知传 0
+     */
+    public void broadcastPostsChanged(String action, long postId) {
+        String act = (action == null) ? "update" : action.replace("\"", "");
+        broadcast("{\"type\":\"posts_changed\",\"action\":\"" + act + "\",\"id\":" + postId + "}");
     }
 
     /** 从注册表移除并修正计数（不关闭流，由持有者关闭） */
@@ -141,9 +158,12 @@ public class SseManager {
     }
 
     public void sendTo(OutputStream os, String data) throws IOException {
+        byte[] payload = ("data: " + data + "\n\n").getBytes(StandardCharsets.UTF_8);
         synchronized (os) {
-            os.write(("data: " + data + "\n\n").getBytes(StandardCharsets.UTF_8));
+            os.write(payload);
         }
+        String user = clients.get(os);
+        if (user != null) TrafficMonitor.accountOut(user, payload.length);
         touch(os);
     }
 

@@ -104,7 +104,7 @@ public class UserStore {
         if (username == null) return null;
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT username, nickname, avatar_id, is_admin, created_at FROM users WHERE username = ?")) {
+                     "SELECT username, nickname, avatar_id, is_admin, created_at, theme FROM users WHERE username = ?")) {
             ps.setString(1, username);
             ResultSet rs = ps.executeQuery();
             if (rs.next()) return mapUser(rs);
@@ -129,24 +129,87 @@ public class UserStore {
 
     public boolean updateProfile(String username, String nickname, String avatarId) {
         if (username == null) return false;
+        // 昵称变了就留一条历史，便于以后回看用过哪些昵称
+        String before = getNickname(username);
+        boolean changed = before != null && !before.equals(nickname);
+
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(
                      "UPDATE users SET nickname = ?, avatar_id = ? WHERE username = ?")) {
             ps.setString(1, nickname);
             ps.setString(2, avatarId);
             ps.setString(3, username);
-            return ps.executeUpdate() > 0;
+            boolean ok = ps.executeUpdate() > 0;
+            if (ok && changed) recordNickname(username, nickname);
+            return ok;
         } catch (SQLException e) {
             System.err.println("[UserStore] 更新资料失败：" + e.getMessage());
             return false;
         }
     }
 
+    /** 取当前昵称；用户不存在返回 null */
+    public String getNickname(String username) {
+        if (username == null) return null;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT nickname FROM users WHERE username = ?")) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            return null;
+        }
+    }
+
+    /** 记一条昵称历史 */
+    public boolean recordNickname(String username, String nickname) {
+        if (username == null || nickname == null || nickname.isBlank()) return false;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "INSERT INTO nickname_history(username, nickname, changed_at) VALUES(?,?,?)")) {
+            ps.setString(1, username);
+            ps.setString(2, nickname);
+            ps.setLong(3, System.currentTimeMillis());
+            ps.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            System.err.println("[UserStore] 记录昵称历史失败：" + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * 取某用户的昵称历史，最近的在前。
+     * 返回的每项是 [nickname, changedAt]。
+     */
+    public List<String[]> nicknameHistory(String username, int limit) {
+        List<String[]> out = new ArrayList<>();
+        if (username == null) return out;
+        if (limit <= 0) limit = 50;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT nickname, changed_at FROM nickname_history " +
+                             "WHERE username = ? ORDER BY changed_at DESC, id DESC LIMIT ?")) {
+            ps.setString(1, username);
+            ps.setInt(2, limit);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new String[]{ rs.getString("nickname"), String.valueOf(rs.getLong("changed_at")) });
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("[UserStore] 查询昵称历史失败：" + e.getMessage());
+        }
+        return out;
+    }
+
     public List<User> listAll() {
         List<User> result = new ArrayList<>();
         try (Connection conn = DatabaseManager.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT username, nickname, avatar_id, is_admin, created_at FROM users ORDER BY created_at ASC")) {
+                     "SELECT username, nickname, avatar_id, is_admin, created_at, theme FROM users ORDER BY created_at ASC")) {
             ResultSet rs = ps.executeQuery();
             while (rs.next()) result.add(mapUser(rs));
         } catch (SQLException e) {
@@ -223,7 +286,64 @@ public class UserStore {
         u.avatarId = rs.getString("avatar_id");
         u.isAdmin = rs.getInt("is_admin") == 1;
         u.createdAt = rs.getLong("created_at");
+        // theme 列在老库里可能不存在，读不到就当作 null（即默认配色）
+        try { u.theme = rs.getString("theme"); } catch (SQLException ignored) {}
         return u;
+    }
+
+    /** 该用户发过的聊天消息数（用于个人主页的统计） */
+    public int messageCount(String username) {
+        if (username == null) return 0;
+        return countOf("SELECT COUNT(*) FROM messages WHERE username = ?", username);
+    }
+
+    /** 该用户发过的帖子数 */
+    public int postCount(String username) {
+        if (username == null) return 0;
+        return countOf("SELECT COUNT(*) FROM posts WHERE author = ?", username);
+    }
+
+    /** 计数查询的公共实现；出错返回 0，不让统计失败拖垮页面 */
+    private int countOf(String sql, String username) {
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        } catch (SQLException e) {
+            return 0;
+        }
+    }
+
+    /** 取用户选择的配色主题名；没设过或用户不存在返回 null */
+    public String getTheme(String username) {
+        if (username == null) return null;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT theme FROM users WHERE username = ?")) {
+            ps.setString(1, username);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        } catch (SQLException e) {
+            return null;
+        }
+    }
+
+    /** 设置配色主题；主题名合法性由调用方（Theme）校验 */
+    public boolean setTheme(String username, String theme) {
+        if (username == null) return false;
+        try (Connection conn = DatabaseManager.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE users SET theme = ? WHERE username = ?")) {
+            ps.setString(1, theme);
+            ps.setString(2, username);
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            System.err.println("[UserStore] 保存配色失败：" + e.getMessage());
+            return false;
+        }
     }
 
     // ==================== 密码哈希 ====================

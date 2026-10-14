@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>帖子 - 519SB</title>
+<style>
+  /* ===== 主题变量：服务器按用户偏好注入覆盖块，默认即绿色 ===== */
+  :root {
+    --primary: #07c160;
+    --primary-dark: #06ad56;
+    --primary-light: #e8f7f0;
+    --primary-fade: #f0f9f4;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+  #header { background: #fff; padding: 10px 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; }
+  #header .title { font-size: 15px; font-weight: bold; }
+  #header .right { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #666; }
+  #header .right a, #header .right button { font-size: 12px; padding: 5px 10px; border: 1px solid #ddd; background: #fff; border-radius: 6px; cursor: pointer; color: #666; text-decoration: none; font-family: inherit; }
+  #header .right a:hover, #header .right button:hover { background: #f5f5f5; }
+  #header .right a.primary { border-color: var(--primary); color: var(--primary); }
+  #header .right button.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+  #header .right button.primary:hover { background: var(--primary-dark); }
+  #header .right button.online-btn { border-color: var(--primary); color: var(--primary); }
+  #header .right button.online-btn.active { background: var(--primary); color: #fff; }
+  .my-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-weight: bold; font-size: 13px; overflow: hidden; cursor: pointer; text-decoration: none; }
+  .my-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+  .container { max-width: 720px; margin: 20px auto; padding: 0 15px; }
+  .post-card {
+    background: #fff; border-radius: 12px; padding: 18px 20px;
+    margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+  }
+  .post-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+  .post-card h2 { font-size: 17px; color: #222; margin-bottom: 8px; }
+  .post-card .excerpt { font-size: 14px; color: #666; line-height: 1.6; margin-bottom: 10px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .post-card .thumb-strip { display: flex; gap: 6px; margin-bottom: 10px; }
+  .post-card .thumb-strip img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; cursor: zoom-in; }
+  .post-card .meta { font-size: 12px; color: #999; display: flex; gap: 12px; }
+  .post-card .meta a.author-link { color: #999; text-decoration: none; }
+  .post-card .meta a.author-link:hover { color: var(--primary); text-decoration: underline; }
+  .empty { text-align: center; color: #999; padding: 40px; }
+
+  /* ===== 搜索 ===== */
+  .search-bar {
+    max-width: 720px; margin: 16px auto 0; padding: 0 15px;
+    display: flex; gap: 8px; align-items: center;
+  }
+  .search-bar input {
+    flex: 1; min-width: 0;
+    padding: 9px 12px; font-size: 14px; font-family: inherit;
+    border: 1px solid #ddd; border-radius: 8px; outline: none;
+  }
+  .search-bar input:focus { border-color: var(--primary); }
+  .search-bar select {
+    padding: 9px 8px; font-size: 13px; font-family: inherit;
+    border: 1px solid #ddd; border-radius: 8px;
+    background: #fff; color: #666; outline: none; cursor: pointer;
+  }
+  .search-bar select:focus { border-color: var(--primary); }
+  .search-bar button {
+    padding: 9px 16px; font-size: 14px; font-family: inherit;
+    border: none; border-radius: 8px;
+    background: var(--primary); color: #fff; cursor: pointer;
+  }
+  .search-bar button:hover { background: var(--primary-dark); }
+  .search-bar button.ghost {
+    background: #fff; color: #666; border: 1px solid #ddd;
+  }
+  .search-bar button.ghost:hover { background: #f5f5f5; color: #333; }
+  .search-hint {
+    max-width: 720px; margin: 10px auto 0; padding: 0 15px;
+    font-size: 13px; color: #999;
+  }
+  .search-hint b { color: var(--primary); font-weight: 500; }
+
+  #sidebar {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 220px;
+    background: #fff;
+    border-left: 1px solid #e5e5e5;
+    overflow-y: auto;
+    padding: 12px 10px;
+    font-size: 13px;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.08);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    z-index: 200;
+  }
+  #sidebar.show { transform: translateX(0); }
+  #sidebar h3 { font-size: 12px; color: #999; font-weight: normal; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+  #sidebar h3 .close-btn { font-size: 16px; color: #999; cursor: pointer; background: none; border: none; padding: 0 4px; line-height: 1; }
+  #sidebar h3 .close-btn:hover { color: #333; }
+  .online-user { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-radius: 6px; color: #333; }
+  .online-user .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--primary); flex-shrink: 0; }
+  .online-user .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .online-user .avatar { width: 24px; height: 24px; border-radius: 50%; background: #bbb; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold; overflow: hidden; flex-shrink: 0; }
+  .online-user .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  /* 在线列表的头像是进入对方主页的链接，去掉下划线并加可点反馈 */
+  a.avatar { text-decoration: none; }
+  a.avatar:hover { opacity: 0.85; }
+
+  #sidebar-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.15); display: none; z-index: 150; }
+  #sidebar-mask.show { display: block; }
+
+  .mask { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 300; padding: 20px; }
+  .mask.show { display: flex; }
+  .modal { background: #fff; border-radius: 12px; padding: 24px; width: 100%; max-width: 560px; max-height: 90vh; overflow-y: auto; }
+  .modal h3 { font-size: 16px; margin-bottom: 16px; color: #333; }
+  .modal input, .modal textarea { width: 100%; padding: 10px 12px; font-size: 14px; font-family: inherit; border: 1px solid #ddd; border-radius: 8px; outline: none; margin-bottom: 12px; }
+  .modal input:focus, .modal textarea:focus { border-color: var(--primary); }
+  .modal textarea { min-height: 200px; resize: vertical; line-height: 1.6; }
+  .modal-actions { display: flex; gap: 8px; margin-top: 8px; }
+  .modal-actions button { flex: 1; padding: 10px; font-size: 14px; border-radius: 8px; border: none; cursor: pointer; font-family: inherit; }
+  .modal-actions .save { background: var(--primary); color: #fff; }
+  .modal-actions .cancel { background: #eee; color: #333; }
+  .msg { padding: 8px 12px; border-radius: 6px; font-size: 13px; margin-bottom: 12px; display: none; }
+  .msg.show { display: block; }
+  .msg.error { background: #fee; color: #c33; }
+
+  .image-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .image-item { position: relative; width: 80px; height: 80px; border-radius: 6px; overflow: hidden; }
+  .image-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .image-item .remove-btn {
+    position: absolute; top: 2px; right: 2px;
+    width: 18px; height: 18px; line-height: 1;
+    background: rgba(0,0,0,0.6); color: #fff;
+    border: none; border-radius: 50%; cursor: pointer; font-size: 12px; padding: 0;
+  }
+  .add-image-btn {
+    width: 80px; height: 80px; border: 1px dashed #ddd; background: #fafafa;
+    border-radius: 6px; cursor: pointer; font-size: 24px; color: #999; font-family: inherit;
+  }
+  .add-image-btn:hover { background: #f0f0f0; color: #666; }
+
+  /* 图片预览：支持滚轮缩放、拖动、防离开屏幕 */
+  #image-preview {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.92);
+    display: none; align-items: center; justify-content: center;
+    z-index: 999; padding: 20px; overflow: hidden;
+  }
+  #image-preview.show { display: flex; }
+  .preview-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 95vw; max-height: 95vh; }
+  .preview-content img {
+    max-width: 92vw; max-height: 82vh; object-fit: contain; border-radius: 4px;
+    cursor: grab; user-select: none; -webkit-user-drag: none;
+  }
+  .preview-content img.dragging { cursor: grabbing; }
+  .preview-content img.smooth { transition: transform 0.1s ease-out; }
+  .preview-actions { display: flex; gap: 12px; }
+  .preview-actions a, .preview-actions button { padding: 9px 24px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; text-decoration: none; font-family: inherit; line-height: 1.2; }
+  .preview-actions a { background: var(--primary); color: #fff; }
+  .preview-actions button { background: #fff; color: #333; }
+</style>
+<script src="/theme.js"></script>
+<script src="/media.js"></script></head><body>
+<div id="header">
+  <span class="title">519SB 帖子</span>
+  <div class="right">
+    <a href="/chat" class="primary">聊天室</a>
+    <button id="new-btn" class="primary">发帖</button>
+    <button id="online-btn" class="online-btn">在线 <span id="online-count">0</span></button>
+    <a id="admin-link" href="/admin" style="display:none;">管理</a>
+    <a href="/profile" title="个人中心"><span class="my-avatar" id="my-avatar"></span></a>
+    <span id="my-nickname"></span>
+    <button onclick="doLogout()">退出</button>
+  </div>
+</div>
+<div class="search-bar">
+  <input type="text" id="search-input" placeholder="搜索帖子（标题 / 内容 / 作者）" maxlength="60">
+  <select id="search-field" title="搜索范围">
+    <option value="all">全部</option>
+    <option value="title">标题</option>
+    <option value="content">内容</option>
+    <option value="author">作者</option>
+  </select>
+  <button id="search-btn">搜索</button>
+  <button id="search-clear" class="ghost" style="display:none;">返回列表</button>
+</div>
+<div class="search-hint" id="search-hint" style="display:none;"></div>
+
+<div class="container" id="list"></div>
+
+<div id="sidebar-mask" onclick="toggleSidebar(false)"></div>
+<div id="sidebar">
+  <h3>
+    <span>在线用户</span>
+    <button class="close-btn" onclick="toggleSidebar(false)" title="关闭">×</button>
+  </h3>
+  <div id="online-list"></div>
+</div>
+
+<div class="mask" id="edit-mask">
+  <div class="modal">
+    <h3>发新帖</h3>
+    <div id="edit-msg" class="msg"></div>
+    <input type="text" id="edit-title" placeholder="标题" maxlength="100">
+    <textarea id="edit-content" placeholder="正文内容..."></textarea>
+    <div class="image-list" id="edit-image-list"></div>
+    <input type="file" id="edit-image-input" accept="image/*" multiple style="display: none;">
+    <button type="button" class="add-image-btn" onclick="document.getElementById('edit-image-input').click()">+</button>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeEdit()">取消</button>
+      <button class="save" onclick="savePost()">发布</button>
+    </div>
+  </div>
+</div>
+
+<div id="image-preview" onclick="onPreviewMaskClick(event)">
+  <div class="preview-content">
+    <img id="preview-img" src="" alt="" draggable="false" onwheel="onPreviewWheel(event)">
+    <div class="preview-actions">
+      <a id="preview-download" href="#" download>下载图片</a>
+      <button onclick="resetPreviewZoom()">重置缩放</button>
+      <button onclick="closePreview()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('token');
+const MY_NICKNAME = localStorage.getItem('nickname') || localStorage.getItem('username') || '';
+const MY_AVATAR = localStorage.getItem('avatarId') || null;
+const IS_ADMIN = localStorage.getItem('isAdmin') === 'true';
+if (!TOKEN) { location.href = '/login'; }
+
+var lastOnlineSignature = '';
+var sidebar = document.getElementById('sidebar');
+var sidebarMask = document.getElementById('sidebar-mask');
+var onlineBtn = document.getElementById('online-btn');
+var editImages = [];
+
+document.getElementById('my-nickname').textContent = MY_NICKNAME;
+if (IS_ADMIN) {
+  var adminLink = document.getElementById('admin-link');
+  adminLink.style.display = 'inline-block';
+  adminLink.href = '/admin?token=' + encodeURIComponent(TOKEN);
+}
+
+function renderMyAvatar() {
+  const el = document.getElementById('my-avatar');
+  el.innerHTML = '';
+  if (MY_AVATAR && MY_AVATAR !== 'null') {
+    const img = document.createElement('img');
+    img.src = '/image/' + MY_AVATAR;
+    el.appendChild(img);
+  } else {
+    el.textContent = MY_NICKNAME.charAt(0).toUpperCase();
+  }
+}
+renderMyAvatar();
+
+function doLogout() {
+  if (!confirm('确定退出登录？')) return;
+  fetch('/api/logout?token=' + encodeURIComponent(TOKEN), { method: 'POST' }).finally(() => {
+    localStorage.clear();
+    location.href = '/login';
+  });
+}
+
+function getImageIds(images) {
+  if (!images) return [];
+  if (Array.isArray(images)) return images.slice();
+  if (typeof images === 'string') {
+    try {
+      var arr = JSON.parse(images);
+      return Array.isArray(arr) ? arr : [];
+    } catch (e) { return []; }
+  }
+  return [];
+}
+
+// ==================== 侧边栏 ====================
+function toggleSidebar(show) {
+  if (typeof show === 'undefined') show = !sidebar.classList.contains('show');
+  if (show) {
+    sidebar.classList.add('show');
+    sidebarMask.classList.add('show');
+    onlineBtn.classList.add('active');
+  } else {
+    sidebar.classList.remove('show');
+    sidebarMask.classList.remove('show');
+    onlineBtn.classList.remove('active');
+  }
+}
+onlineBtn.onclick = function () { toggleSidebar(); };
+
+/**
+ * 构建圆形头像（有图用图，无图用首字母）；传了 username 就包一层进他人主页的链接。
+ * 只给最外层加 class，内层用同名 class，避免样式被套两遍。
+ */
+function buildAvatar(d, cls) {
+  const inner = document.createElement('div');
+  inner.className = cls;
+  if (d && d.avatarId) {
+    const img = document.createElement('img');
+    img.src = '/image/' + encodeURIComponent(d.avatarId);
+    inner.appendChild(img);
+  } else {
+    const who = (d && (d.nickname || d.username)) || '?';
+    inner.textContent = who.charAt(0).toUpperCase();
+  }
+  if (d && d.username) {
+    const a = document.createElement('a');
+    a.className = 'avatar';
+    a.href = '/user/' + encodeURIComponent(d.username) + '?token=' + encodeURIComponent(TOKEN);
+    a.appendChild(inner);
+    return a;
+  }
+  return inner;
+}
+
+function renderOnlineUsers(users) {
+  document.getElementById('online-count').textContent = users.length;
+  var sig = users.map(function (u) { return u.username + ':' + (u.avatarId || '') + ':' + (u.nickname || ''); }).join('|');
+  if (sig === lastOnlineSignature) return;
+  lastOnlineSignature = sig;
+
+  var list = document.getElementById('online-list');
+  list.innerHTML = '';
+  if (users.length === 0) {
+    var empty = document.createElement('div');
+    empty.style.color = '#999';
+    empty.style.fontSize = '12px';
+    empty.style.padding = '10px 4px';
+    empty.textContent = '暂无在线用户';
+    list.appendChild(empty);
+    return;
+  }
+  for (var i = 0; i < users.length; i++) {
+    var u = users[i];
+    var div = document.createElement('div');
+    div.className = 'online-user';
+    var dot = document.createElement('span'); dot.className = 'dot';
+    var av = buildAvatar(u, 'avatar');
+    var name = document.createElement('span'); name.className = 'name';
+    name.textContent = u.nickname || u.username;
+    div.appendChild(dot); div.appendChild(av); div.appendChild(name);
+    list.appendChild(div);
+  }
+}
+
+// ==================== SSE ====================
+var es = new EventSource('/events?token=' + encodeURIComponent(TOKEN));
+es.onmessage = function (e) {
+  if (!e || !e.data || typeof e.data !== 'string') return;
+  var raw = e.data.trim();
+  if (raw.length === 0) return;
+  var data;
+  try { data = JSON.parse(raw); } catch (err) { return; }
+
+  if (data.type === 'online_list') { renderOnlineUsers(data.users || []); return; }
+  if (data.type === 'kick') {
+    alert(data.reason || '你已被管理员踢出');
+    localStorage.clear();
+    location.href = '/login';
+    return;
+  }
+  if (data.type === 'posts_changed') { scheduleRefresh(); return; }
+};
+
+// ==================== 帖子自动刷新 ====================
+var refreshTimer = null;
+
+/** 正在发帖/编辑时不刷新，否则会把用户填的内容冲掉 */
+function isEditing() {
+  var mask = document.getElementById('edit-mask');
+  return !!mask && mask.classList.contains('show');
+}
+
+/** 防抖：短时间内多条变动只刷一次 */
+function scheduleRefresh() {
+  if (isEditing()) return;
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(refreshList, 600);
+}
+
+async function refreshList() {
+  refreshTimer = null;
+  if (isEditing()) return;
+  var y = window.scrollY;
+  // 搜索状态下重跑同一次搜索，否则新帖子不会出现在结果里
+  if (searchKeyword) await doSearch();
+  else await loadList();
+  // 刷新会重建 DOM，把滚动位置还原回去，避免"读到一半被弹回顶部"
+  window.scrollTo(0, y);
+}
+
+// ==================== 图片上传 ====================
+document.getElementById('edit-image-input').onchange = async (e) => {
+  var files = Array.from(e.target.files);
+  for (var i = 0; i < files.length; i++) {
+    if (editImages.length >= 9) { alert('最多 9 张图片'); break; }
+    await uploadOne(files[i]);
+  }
+  e.target.value = '';
+  renderEditImages();
+};
+
+function uploadOne(file) {
+  return new Promise((resolve) => {
+    // 走共享助手：GIF/动态 WebP 原样上传，其余压缩后上传
+    MediaUpload.send(file, {
+      token: TOKEN,
+      compress: compressImage,
+      maxWidth: 1200,
+      stillType: 'post',
+      onSuccess: function (id) { editImages.push(id); resolve(); },
+      onError: function (msg) { alert(msg); resolve(); }
+    });
+  });
+}
+
+function renderEditImages() {
+  var box = document.getElementById('edit-image-list');
+  box.innerHTML = '';
+  editImages.forEach((id, idx) => {
+    var item = document.createElement('div');
+    item.className = 'image-item';
+    var img = document.createElement('img');
+    img.src = '/image/' + id;
+    var rm = document.createElement('button');
+    rm.className = 'remove-btn';
+    rm.textContent = '×';
+    rm.onclick = () => { editImages.splice(idx, 1); renderEditImages(); };
+    item.appendChild(img);
+    item.appendChild(rm);
+    box.appendChild(item);
+  });
+}
+
+// ==================== 帖子列表 ====================
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + '-' +
+         String(d.getMonth() + 1).padStart(2, '0') + '-' +
+         String(d.getDate()).padStart(2, '0') + ' ' +
+         String(d.getHours()).padStart(2, '0') + ':' +
+         String(d.getMinutes()).padStart(2, '0');
+}
+
+async function loadList() {
+  const box = document.getElementById('list');
+  box.innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    const res = await fetch('/api/posts');
+    const r = await res.json();
+    if (!r.ok) { box.innerHTML = '<div class="empty">加载失败</div>'; return; }
+    renderList(r.posts);
+  } catch (e) {
+    box.innerHTML = '<div class="empty">网络错误：' + e.message + '</div>';
+  }
+}
+
+// ==================== 搜索 ====================
+// 当前生效的关键词；renderList 用它决定"空结果"的文案
+let searchKeyword = '';
+
+async function doSearch() {
+  const input = document.getElementById('search-input');
+  const field = document.getElementById('search-field').value;
+  const q = input.value.trim();
+
+  if (!q) { exitSearch(); return; }
+
+  const box = document.getElementById('list');
+  box.innerHTML = '<div class="empty">搜索中...</div>';
+  try {
+    const res = await fetch('/api/posts/search?q=' + encodeURIComponent(q)
+      + '&field=' + encodeURIComponent(field));
+    const r = await res.json();
+    if (!r.ok) {
+      box.innerHTML = '<div class="empty">' + (r.msg || '搜索失败') + '</div>';
+      return;
+    }
+    searchKeyword = q;
+    document.getElementById('search-clear').style.display = '';
+    const hint = document.getElementById('search-hint');
+    hint.style.display = '';
+    hint.innerHTML = '「<b></b>」找到 ' + (r.posts || []).length + ' 篇';
+    hint.querySelector('b').textContent = q;
+    renderList(r.posts);
+  } catch (e) {
+    box.innerHTML = '<div class="empty">网络错误：' + e.message + '</div>';
+  }
+}
+
+function exitSearch() {
+  document.getElementById('search-input').value = '';
+  document.getElementById('search-clear').style.display = 'none';
+  document.getElementById('search-hint').style.display = 'none';
+  searchKeyword = '';
+  loadList();
+}
+
+document.getElementById('search-btn').onclick = doSearch;
+document.getElementById('search-clear').onclick = exitSearch;
+document.getElementById('search-input').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+});
+// 切换搜索范围后如果已有结果，直接重搜
+document.getElementById('search-field').addEventListener('change', function () {
+  if (searchKeyword) doSearch();
+});
+
+function renderList(posts) {
+  const box = document.getElementById('list');
+  box.innerHTML = '';
+  if (!posts || posts.length === 0) {
+    // 区分"一篇都没有"和"搜不到"，否则用户会以为论坛是空的
+    box.innerHTML = searchKeyword
+      ? '<div class="empty">没有匹配的帖子，换个关键词试试</div>'
+      : '<div class="empty">还没有帖子，点右上角发一篇吧~</div>';
+    return;
+  }
+  posts.forEach(p => {
+    const card = document.createElement('div');
+    card.className = 'post-card';
+
+    const h2 = document.createElement('h2');
+    h2.textContent = p.title;
+
+    const ex = document.createElement('div');
+    ex.className = 'excerpt';
+    ex.textContent = p.content.length > 100 ? p.content.substring(0, 100) + '...' : p.content;
+
+    const ids = getImageIds(p.images);
+    let thumbs = null;
+    if (ids.length > 0) {
+      thumbs = document.createElement('div');
+      thumbs.className = 'thumb-strip';
+      ids.slice(0, 3).forEach(id => {
+        const img = document.createElement('img');
+        img.src = '/image/' + id;
+        img.onclick = (e) => { e.stopPropagation(); openPreview(id); };
+        thumbs.appendChild(img);
+      });
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    // 作者做成进主页的链接。卡片本身整块可点（进帖子），所以要挡住冒泡，
+    // 否则点作者会同时触发卡片跳转。
+    const a = document.createElement('a');
+    a.className = 'author-link';
+    a.href = '/user/' + encodeURIComponent(p.author) + '?token=' + encodeURIComponent(TOKEN);
+    a.textContent = 'by ' + (p.authorNickname || p.author);
+    a.onclick = (ev) => ev.stopPropagation();
+    const t = document.createElement('span'); t.textContent = fmtTime(p.createdAt);
+    const v = document.createElement('span'); v.textContent = p.views + ' 阅读';
+    const l = document.createElement('span'); l.textContent = '❤ ' + (p.likeCount || 0);
+    meta.appendChild(a); meta.appendChild(t); meta.appendChild(v); meta.appendChild(l);
+
+    card.appendChild(h2);
+    card.appendChild(ex);
+    if (thumbs) card.appendChild(thumbs);
+    card.appendChild(meta);
+    card.onclick = () => location.href = '/posts/' + p.id;
+    box.appendChild(card);
+  });
+}
+
+function openEdit() {
+  editImages = [];
+  renderEditImages();
+  document.getElementById('edit-title').value = '';
+  document.getElementById('edit-content').value = '';
+  document.getElementById('edit-msg').className = 'msg';
+  document.getElementById('edit-mask').classList.add('show');
+  document.getElementById('edit-title').focus();
+}
+function closeEdit() {
+  document.getElementById('edit-mask').classList.remove('show');
+}
+function showEditMsg(text) {
+  const el = document.getElementById('edit-msg');
+  el.textContent = text;
+  el.className = 'msg show error';
+}
+
+async function savePost() {
+  const title = document.getElementById('edit-title').value.trim();
+  const content = document.getElementById('edit-content').value;
+  if (!title) { showEditMsg('标题不能为空'); return; }
+  if (!content.trim()) { showEditMsg('内容不能为空'); return; }
+  try {
+    const res = await fetch('/api/posts?token=' + encodeURIComponent(TOKEN), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, content, images: editImages })
+    });
+    const r = await res.json();
+    if (r.ok) {
+      closeEdit();
+      location.href = '/posts/' + r.id;
+    } else {
+      showEditMsg(r.msg || '发帖失败');
+    }
+  } catch (e) {
+    showEditMsg('网络错误：' + e.message);
+  }
+}
+
+// ==================== 图片预览（缩放 + 拖动 + 防离开屏幕） ====================
+var previewScale = 1;
+var previewMinScale = 0.2;
+var previewMaxScale = 8;
+var previewX = 0;
+var previewY = 0;
+var dragging = false;
+var dragStartX = 0;
+var dragStartY = 0;
+var dragOffsetX = 0;
+var dragOffsetY = 0;
+
+function applyPreviewTransform(smooth) {
+  var img = document.getElementById('preview-img');
+  if (smooth) img.classList.add('smooth');
+  else img.classList.remove('smooth');
+  img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+}
+
+function openPreview(id) {
+  previewScale = 1;
+  previewX = 0;
+  previewY = 0;
+  dragging = false;
+  var img = document.getElementById('preview-img');
+  img.src = '/image/' + id;
+  img.classList.remove('dragging');
+  applyPreviewTransform(false);
+  var dl = document.getElementById('preview-download');
+  dl.href = '/image/' + id + '?download=1';
+  dl.setAttribute('download', 'image_' + id + '.jpg');
+  document.getElementById('image-preview').classList.add('show');
+}
+
+function closePreview() {
+  document.getElementById('image-preview').classList.remove('show');
+  var img = document.getElementById('preview-img');
+  img.src = '';
+  img.classList.remove('dragging');
+  previewScale = 1;
+  previewX = 0;
+  previewY = 0;
+  dragging = false;
+}
+
+function resetPreviewZoom() {
+  previewScale = 1;
+  previewX = 0;
+  previewY = 0;
+  applyPreviewTransform(true);
+}
+
+function clampPreviewPosition() {
+  var img = document.getElementById('preview-img');
+  if (!img.src) return;
+  var rect = img.getBoundingClientRect();
+  var vw = window.innerWidth;
+  var vh = window.innerHeight;
+  var margin = 80;
+  var dx = 0, dy = 0;
+  if (rect.right < margin) dx = margin - rect.right;
+  if (rect.left > vw - margin) dx = (vw - margin) - rect.left;
+  if (rect.bottom < margin) dy = margin - rect.bottom;
+  if (rect.top > vh - margin) dy = (vh - margin) - rect.top;
+  if (dx !== 0 || dy !== 0) {
+    previewX += dx;
+    previewY += dy;
+    img.style.transform = 'translate(' + previewX + 'px, ' + previewY + 'px) scale(' + previewScale + ')';
+  }
+}
+
+function onPreviewWheel(e) {
+  e.preventDefault();
+  var delta = -e.deltaY * 0.002;
+  previewScale = previewScale * (1 + delta);
+  if (previewScale < previewMinScale) previewScale = previewMinScale;
+  if (previewScale > previewMaxScale) previewScale = previewMaxScale;
+  applyPreviewTransform(true);
+  setTimeout(clampPreviewPosition, 120);
+}
+
+function onPreviewMouseDown(e) {
+  if (e.button !== 0) return;
+  dragging = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragOffsetX = previewX;
+  dragOffsetY = previewY;
+  document.getElementById('preview-img').classList.add('dragging');
+  e.preventDefault();
+}
+
+function onPreviewMouseMove(e) {
+  if (!dragging) return;
+  previewX = dragOffsetX + (e.clientX - dragStartX);
+  previewY = dragOffsetY + (e.clientY - dragStartY);
+  applyPreviewTransform(false);
+}
+
+function onPreviewMouseUp(e) {
+  if (!dragging) return;
+  dragging = false;
+  document.getElementById('preview-img').classList.remove('dragging');
+  clampPreviewPosition();
+}
+
+function onPreviewMaskClick(e) {
+  if (e.target.id === 'image-preview') closePreview();
+}
+
+(function() {
+  var img = document.getElementById('preview-img');
+  img.addEventListener('dblclick', resetPreviewZoom);
+  img.addEventListener('mousedown', onPreviewMouseDown);
+  document.addEventListener('mousemove', onPreviewMouseMove);
+  document.addEventListener('mouseup', onPreviewMouseUp);
+})();
+
+// ==================== 工具 ====================
+function compressImage(file, maxWidth, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width, height = img.height;
+      if (width > maxWidth) {
+        height = Math.round(height * maxWidth / width);
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      callback(canvas.toDataURL('image/jpeg', 0.85));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closePreview(); toggleSidebar(false); closeEdit(); }
+});
+
+document.getElementById('new-btn').onclick = openEdit;
+loadList();
+</script></body></html>

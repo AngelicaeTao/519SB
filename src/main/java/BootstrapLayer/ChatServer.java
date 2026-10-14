@@ -10,6 +10,7 @@ import InfrastructureLayer.HttpUtil;
 import InfrastructureLayer.IpRateLimiter;
 import InfrastructureLayer.SessionManager;
 import InfrastructureLayer.SseManager;
+import InfrastructureLayer.TrafficMonitor;
 import com.sun.net.httpserver.*;
 
 import javax.net.ssl.KeyManagerFactory;
@@ -37,7 +38,14 @@ public class ChatServer {
     public static final int SSE_MAX_PER_IP = 10;
     public static final int SSE_MAX_GLOBAL = 500;
     public static final long MAX_BODY_NORMAL = 64L * 1024;
-    public static final long MAX_BODY_UPLOAD = 10L * 1024 * 1024;
+    /**
+     * 上传接口的请求体上限。
+     *
+     * 必须大于最大的单文件上限：文件类 20MB；图片/动图走 base64 会放大 1/3，
+     * 5MB 原始数据约 6.7MB，所以 25MB 足够覆盖全部情况且留有余量。
+     * 这里只是粗粒度的 DoS 边界；真正的限制是 Config.mediaMaxBytes(type)。
+     */
+    public static final long MAX_BODY_UPLOAD = 25L * 1024 * 1024;
 
     public static void main(String[] args) throws Exception {
         DatabaseManager.init();
@@ -60,6 +68,8 @@ public class ChatServer {
         userStore.ensureDefaultAdmin(Config.ADMIN_USERNAME, Config.ADMIN_PASSWORD);
 
         SessionManager sessions = new SessionManager();
+        // 流量统计需要把请求归属到用户，注入解析器以避免反向依赖
+        TrafficMonitor.setUserResolver(sessions::getUser);
         MessageStore store = new MessageStore(Config.MAX_HISTORY);
         SseManager sse = new SseManager();
         PostStore postStore = new PostStore();
@@ -77,7 +87,8 @@ public class ChatServer {
         ImageHandler imageHandler = new ImageHandler(sessions);
         ProfileHandler profileHandler = new ProfileHandler(userStore, sessions);
         AdminHandler adminHandler = new AdminHandler(userStore, store, sessions, sse);
-        PostHandler postHandler = new PostHandler(postStore, sessions, userStore);
+        PostHandler postHandler = new PostHandler(postStore, sessions, userStore, sse);
+        UserHandler userHandler = new UserHandler(userStore, sessions);
 
         HttpsServer server = HttpsServer.create(
                 new InetSocketAddress(Config.BIND_ADDRESS, Config.PORT), 0);
@@ -102,6 +113,8 @@ public class ChatServer {
         server.createContext("/profile",                    wrap(profileHandler::handlePage, limiter, MAX_BODY_NORMAL));
         server.createContext("/api/profile/update",         wrap(profileHandler::handleUpdate, limiter, MAX_BODY_NORMAL));
         server.createContext("/api/profile/changePassword", wrap(profileHandler::handleChangePassword, limiter, MAX_BODY_NORMAL));
+        server.createContext("/api/profile/nicknames",      wrap(profileHandler::handleNicknameHistory, limiter, MAX_BODY_NORMAL));
+        server.createContext("/api/profile/theme",           wrap(profileHandler::handleTheme, limiter, MAX_BODY_NORMAL));
 
         server.createContext("/admin",                    wrap(adminHandler::handlePage, limiter, MAX_BODY_NORMAL));
         server.createContext("/api/admin/users",          wrap(adminHandler::handleListUsers, limiter, MAX_BODY_NORMAL));
@@ -115,6 +128,23 @@ public class ChatServer {
         server.createContext("/posts",     wrap(postHandler, limiter, MAX_BODY_NORMAL));
         server.createContext("/api/posts", wrap(postHandler, limiter, MAX_BODY_NORMAL));
 
+        server.createContext("/user",      wrap(userHandler, limiter, MAX_BODY_NORMAL));
+
+        // 前端共用脚本。都是静态资源、不含用户数据：
+        //   theme.js  按 localStorage 里的配色偏好注入覆盖样式
+        //   media.js  动态图识别与上传（聊天/帖子/评论共用）
+        for (String asset : new String[]{"theme.js", "media.js"}) {
+            final String name = asset;
+            server.createContext("/" + name, ex -> {
+                try {
+                    if (HttpUtil.rejectWrongMethod(ex, "GET")) return;
+                    HttpUtil.sendJs(ex, 200, InfrastructureLayer.WebResources.load(name));
+                } catch (IOException e) {
+                    ex.close();
+                }
+            });
+        }
+
         server.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
 
         ScheduledExecutorService cleaner = Executors.newSingleThreadScheduledExecutor();
@@ -122,6 +152,21 @@ public class ChatServer {
             try { sessions.cleanup(); } catch (Exception ignored) {}
             try { limiter.cleanup(); } catch (Exception ignored) {}
         }, 5, 5, TimeUnit.MINUTES);
+
+        // 流量：内存累积，每 30 秒落盘一次；每 5 分钟在控制台打一次当月汇总。
+        // 每个请求都写库会拖垮性能，所以走批量。
+        cleaner.scheduleAtFixedRate(() -> {
+            try { TrafficMonitor.flush(); } catch (Exception ignored) {}
+        }, 30, 30, TimeUnit.SECONDS);
+
+        cleaner.scheduleAtFixedRate(() -> {
+            try { TrafficMonitor.printSummary(); } catch (Exception ignored) {}
+        }, 5, 5, TimeUnit.MINUTES);
+
+        // 退出前把剩余增量落盘，避免重启丢掉最后几十秒的统计
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            try { TrafficMonitor.flush(); } catch (Exception ignored) {}
+        }, "traffic-flush"));
 
         server.start();
 
@@ -131,7 +176,11 @@ public class ChatServer {
         System.out.println("  本机测试:  https://localhost:" + Config.PORT + "/");
         System.out.println("  默认管理员: " + Config.ADMIN_USERNAME + " / " + Config.ADMIN_PASSWORD);
         System.out.println("  限流: " + RATE_LIMIT_PER_MINUTE + " 请求/分钟/IP, 并发 " + RATE_LIMIT_CONCURRENT_PER_IP);
+        System.out.println("  流量统计: 每月重置，每 5 分钟在控制台打印一次当月汇总");
         System.out.println("==========================================");
+
+        // 启动时先看一眼当月已有多少流量
+        try { TrafficMonitor.printSummary(); } catch (Exception ignored) {}
 
         maybeOpenBrowser();
     }

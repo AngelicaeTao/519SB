@@ -7,6 +7,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -45,8 +47,21 @@ public class HttpUtil {
      * 按实际字节数计数，超出限制立即中止。
      */
     public static String readBody(HttpExchange ex, long maxBytes) throws IOException {
-        byte[] bytes = readLimited(ex.getRequestBody(), maxBytes);
+        byte[] bytes = readBodyBytes(ex, maxBytes);
         return new String(bytes, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * 读取请求体原始字节。
+     *
+     * 视频和文件走原始二进制上传：base64 会把体积撑大 1/3，还要额外解码，
+     * 对大文件既费带宽又费内存。图片/语音仍走 base64（前端就是这个格式）。
+     */
+    public static byte[] readBodyBytes(HttpExchange ex, long maxBytes) throws IOException {
+        byte[] bytes = readLimited(ex.getRequestBody(), maxBytes);
+        // 流量统计：按实际读到的字节数计（chunked 也算得准）
+        TrafficMonitor.accountIn(ex, bytes.length);
+        return bytes;
     }
 
     /** 从流中读取至多 maxBytes 字节；超出则抛 BodyTooLargeException */
@@ -159,14 +174,23 @@ public class HttpUtil {
      * - Referrer-Policy：token 走 query 传参，必须保证不随 Referer 外泄。
      * - HSTS 只在 HTTPS 语义成立时才有意义，这里服务本身只有 HTTPS，可以直接发。
      */
-    private static void applySecurityHeaders(HttpExchange ex) {
-        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
+    /**
+     * 写出响应体并计入流量。
+     * 所有 sendXxx 都走这里，避免漏统计某一条响应路径。
+     */
+    private static void writeOut(HttpExchange ex, OutputStream os, byte[] bytes) throws IOException {
+        os.write(bytes);
+        TrafficMonitor.accountOut(ex, bytes.length);
+    }
+
+    private static void applySecurityHeaders(HttpExchange ex) {        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         ex.getResponseHeaders().set("X-Frame-Options", "DENY");
         ex.getResponseHeaders().set("Referrer-Policy", "same-origin");
         ex.getResponseHeaders().set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
         ex.getResponseHeaders().set("Content-Security-Policy",
                 "default-src 'self'; "
                         + "img-src 'self' data: blob:; "
+                        + "media-src 'self'; "
                         + "script-src 'self' 'unsafe-inline'; "
                         + "style-src 'self' 'unsafe-inline'; "
                         + "connect-src 'self'; "
@@ -179,11 +203,50 @@ public class HttpUtil {
     /** 返回 HTML 响应 */
     public static void sendHtml(HttpExchange ex, int status, String html) throws IOException {
         applySecurityHeaders(ex);
+        // 页面会按用户配色/资料变化，禁止缓存。
+        // 否则浏览器会按启发式规则缓存旧副本，出现"设置改了但页面没变"。
+        ex.getResponseHeaders().set("Cache-Control", "no-store, no-cache, must-revalidate");
         byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
         ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
-            os.write(bytes);
+            writeOut(ex, os, bytes);
+        }
+    }
+
+    /**
+     * 按用户配色返回 HTML。
+     *
+     * theme 为默认主题时不做任何改动（模板自带的 :root 就是默认色），
+     * 只有选了非默认配色才在 </head> 前插入一块覆盖样式。
+     */
+    public static void sendHtmlThemed(HttpExchange ex, int status, String html, String theme)
+            throws IOException {
+        sendHtml(ex, status, applyTheme(html, theme));
+    }
+
+    /** 把主题覆盖块插到 </head> 前；无需覆盖时原样返回 */
+    public static String applyTheme(String html, String theme) {
+        if (html == null) return null;
+        String block = Theme.overrideStyle(theme);
+        if (block == null) return html;
+        int i = html.indexOf("</head>");
+        if (i < 0) return block + html;
+        return html.substring(0, i) + block + html.substring(i);
+    }
+
+    /**
+     * 返回静态 JS 资源。
+     * 可以缓存——它不带用户数据，是靠浏览器端的 localStorage 决定行为的。
+     */
+    public static void sendJs(HttpExchange ex, int status, String js) throws IOException {
+        applySecurityHeaders(ex);
+        ex.getResponseHeaders().set("Content-Type", "application/javascript; charset=utf-8");
+        ex.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
+        byte[] bytes = js.getBytes(StandardCharsets.UTF_8);
+        ex.sendResponseHeaders(status, bytes.length);
+        try (OutputStream os = ex.getResponseBody()) {
+            writeOut(ex, os, bytes);
         }
     }
 
@@ -195,7 +258,7 @@ public class HttpUtil {
         ex.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
         ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
-            os.write(bytes);
+            writeOut(ex, os, bytes);
         }
     }
 
@@ -206,7 +269,7 @@ public class HttpUtil {
         ex.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
         ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
-            os.write(bytes);
+            writeOut(ex, os, bytes);
         }
     }
 
@@ -219,7 +282,7 @@ public class HttpUtil {
         if (cookie != null) ex.getResponseHeaders().add("Set-Cookie", cookie);
         ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
-            os.write(bytes);
+            writeOut(ex, os, bytes);
         }
     }
 
@@ -231,7 +294,7 @@ public class HttpUtil {
         if (cookie != null) ex.getResponseHeaders().add("Set-Cookie", cookie);
         ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
-            os.write(bytes);
+            writeOut(ex, os, bytes);
         }
     }
 
@@ -264,12 +327,150 @@ public class HttpUtil {
         return null;
     }
 
+    /**
+     * 按文件头识别音频真实类型，返回 MIME；不是受支持的音频则返回 null。
+     *
+     * 和图片一样只认魔数：浏览器录出来的通常是 WebM/Opus（Chrome/Edge）
+     * 或 Ogg/Opus（Firefox），Safari 是 MP4/AAC。
+     */
+    public static String sniffAudioMime(byte[] b) {
+        if (b == null || b.length < 4) return null;
+
+        // WebM / Matroska: 1A 45 DF A3
+        if ((b[0] & 0xFF) == 0x1A && (b[1] & 0xFF) == 0x45
+                && (b[2] & 0xFF) == 0xDF && (b[3] & 0xFF) == 0xA3) {
+            return "audio/webm";
+        }
+        // Ogg: "OggS"
+        if (b[0] == 0x4F && b[1] == 0x67 && b[2] == 0x67 && b[3] == 0x53) {
+            return "audio/ogg";
+        }
+        // WAV: "RIFF" .... "WAVE"
+        if (b.length >= 12 && b[0] == 0x52 && b[1] == 0x49 && b[2] == 0x46 && b[3] == 0x46
+                && b[8] == 0x57 && b[9] == 0x41 && b[10] == 0x56 && b[11] == 0x45) {
+            return "audio/wav";
+        }
+        // MP4 / M4A: 偏移 4 处是 "ftyp"
+        if (b.length >= 12 && b[4] == 0x66 && b[5] == 0x74 && b[6] == 0x79 && b[7] == 0x70) {
+            return "audio/mp4";
+        }
+        // MP3: 带 ID3 标签，或帧同步 FF Ex/Fx
+        if (b.length >= 3 && b[0] == 0x49 && b[1] == 0x44 && b[2] == 0x33) {
+            return "audio/mpeg";
+        }
+        if ((b[0] & 0xFF) == 0xFF && (b[1] & 0xE0) == 0xE0) {
+            return "audio/mpeg";
+        }
+        return null;
+    }
+
+    /**
+     * 按用途选择合适的魔数识别器。
+     * - voice：只接受音频
+     * - anim：只接受可能带多帧的图片格式（GIF / WebP）
+     * - file：不做内容识别，一律按二进制流处理。
+     *         安全性靠"读取时强制作为附件下载"来保证，而不是靠识别内容——
+     *         任意文件本来就没有可识别的固定魔数。
+     * - 其余：图片
+     */
+    public static String sniffMediaMime(String type, byte[] bytes) {
+        if ("voice".equals(type)) return sniffAudioMime(bytes);
+        if ("file".equals(type)) return "application/octet-stream";
+
+        String mime = sniffImageMime(bytes);
+        if (mime == null) return null;
+        if ("anim".equals(type)) {
+            boolean multiFrameCapable = "image/gif".equals(mime) || "image/webp".equals(mime);
+            return multiFrameCapable ? mime : null;
+        }
+        return mime;
+    }
+
+    /**
+     * 净化上传的文件名。
+     *
+     * 目的是让它可以安全地进数据库、进 Content-Disposition 头、进页面文本。
+     * 具体做法：去掉路径分隔符（防目录穿越式命名）、控制字符与引号，
+     * 限制长度，并保证不会只剩一堆点。
+     *
+     * @return 净化后的名字；无法得到有意义的名字时返回 null
+     */
+    public static String sanitizeFileName(String name) {
+        if (name == null) return null;
+        String s = name.trim();
+        if (s.isEmpty()) return null;
+
+        // 只取最后一段，去掉任何路径成分（含 Windows 的反斜杠）
+        int slash = Math.max(s.lastIndexOf('/'), s.lastIndexOf('\\'));
+        if (slash >= 0) s = s.substring(slash + 1);
+
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            // 控制字符、引号、冒号、通配符等都拿掉
+            if (c < 0x20 || c == 0x7F) continue;
+            if (c == '"' || c == '\'' || c == '\\' || c == '/' || c == ':' || c == '*' || c == '?'
+                    || c == '<' || c == '>' || c == '|' || c == '\r' || c == '\n') continue;
+            sb.append(c);
+            if (sb.length() >= 120) break;   // 限制长度
+        }
+        String out = sb.toString().trim();
+        // 全是点或者空的，没有意义
+        if (out.isEmpty() || out.replace(".", "").isEmpty()) return null;
+        return out;
+    }
+
+    /**
+     * 生成 Content-Disposition 头。
+     *
+     * 同时给出 ASCII 版的 filename 和 RFC 5987 的 filename*，
+     * 让中文文件名在老浏览器和现代浏览器下都能正确落地。
+     */
+    public static String contentDisposition(String fileName, boolean inline) {
+        String type = inline ? "inline" : "attachment";
+        String safe = sanitizeFileName(fileName);
+        if (safe == null) safe = "download";
+
+        // ASCII 回退版：非 ASCII 字符替换成下划线
+        StringBuilder ascii = new StringBuilder();
+        for (int i = 0; i < safe.length(); i++) {
+            char c = safe.charAt(i);
+            ascii.append(c < 0x20 || c > 0x7E ? '_' : c);
+        }
+        return type + "; filename=\"" + ascii + "\"; filename*=UTF-8''" + urlEncode(safe);
+    }
+
+    /** 百分号编码（用于 header 里的 filename*，以及 URL 片段） */
+    public static String urlEncode(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder();
+        byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+        for (byte b : bytes) {
+            int c = b & 0xFF;
+            boolean unreserved = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~';
+            if (unreserved) {
+                sb.append((char) c);
+            } else {
+                sb.append('%').append(String.format("%02X", c));
+            }
+        }
+        return sb.toString();
+    }
+
     /** MIME -> 下载文件名后缀 */
     public static String extensionForMime(String mime) {
+        if (mime == null) return ".bin";
         if ("image/png".equals(mime)) return ".png";
         if ("image/gif".equals(mime)) return ".gif";
         if ("image/webp".equals(mime)) return ".webp";
-        return ".jpg";
+        if (mime.startsWith("image/")) return ".jpg";
+        if ("audio/webm".equals(mime)) return ".webm";
+        if ("audio/ogg".equals(mime)) return ".ogg";
+        if ("audio/wav".equals(mime)) return ".wav";
+        if ("audio/mp4".equals(mime)) return ".m4a";
+        if ("audio/mpeg".equals(mime)) return ".mp3";
+        return ".bin";
     }
 
     /** 从 JSON 字符串里提取某个 key 对应的字符串值 */
@@ -286,9 +487,61 @@ public class HttpUtil {
                 .replace("\\t", "\t");
     }
 
+    /**
+     * 从 JSON 里提取某个 key 对应的字符串数组，例如 "images":["ab..","cd.."]。
+     *
+     * 只认形如 ["a","b"] 的简单数组；元素不是字符串、或不是数组时返回空列表。
+     * 这是给配图 id 这种用途写的——值经过调用方校验，不承担通用 JSON 解析职责。
+     */
+    public static List<String> extractJsonStringArray(String json, String key) {
+        List<String> out = new ArrayList<>();
+        if (json == null || key == null) return out;
+
+        Pattern p = Pattern.compile("\"" + Pattern.quote(key) + "\"\\s*:\\s*\\[");
+        Matcher m = p.matcher(json);
+        if (!m.find()) return out;
+
+        int i = m.end();
+        int depth = 1;
+        StringBuilder buf = new StringBuilder();
+        boolean inString = false;
+        boolean escaped = false;
+
+        for (; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (escaped) { escaped = false; if (inString) buf.append(c); continue; }
+            if (c == '\\') { escaped = true; continue; }
+            if (c == '"') {
+                inString = !inString;
+                if (!inString) {
+                    // 一个字符串元素结束
+                    out.add(buf.toString());
+                    buf.setLength(0);
+                }
+                continue;
+            }
+            if (inString) { buf.append(c); continue; }
+            if (c == '[') depth++;
+            else if (c == ']') {
+                depth--;
+                if (depth == 0) break;
+            }
+        }
+        return out;
+    }
+
+    /** 把一批 id 拼成 JSON 数组字符串，用于入库 */
+    public static String toJsonArray(List<String> items) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < items.size(); i++) {
+            if (i > 0) sb.append(",");
+            sb.append("\"").append(escapeJson(items.get(i))).append("\"");
+        }
+        return sb.append("]").toString();
+    }
+
     /** 转义为 JSON 字符串值（严格模式：所有控制字符都转义） */
-    public static String escapeJson(String s) {
-        if (s == null) return "";
+    public static String escapeJson(String s) {        if (s == null) return "";
         char bs = (char) 92;   // 反斜杠
         char qt = (char) 34;   // 双引号
         StringBuilder sb = new StringBuilder(s.length() + 16);
@@ -348,5 +601,29 @@ public class HttpUtil {
     /** 拼接 JSON 字符串字段，自动处理闭合引号 */
     public static String jsonStr(String key, String value) {
         return "\"" + key + "\":\"" + escapeJson(value) + "\"";
+    }
+
+    /**
+     * 转义为 HTML 文本内容。
+     *
+     * 用于把用户输入填进 HTML 模板的占位符。这与 {@link #escapeJson} 完全不同：
+     * escapeJson 只处理 JSON 语义，昵称里的 &lt;script&gt; 经它处理仍是原样，
+     * 直接放进页面就会执行。凡是把不可信文本插进 HTML 的地方都必须走这个。
+     */
+    public static String escapeHtml(String s) {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '&' -> sb.append("&amp;");
+                case '<' -> sb.append("&lt;");
+                case '>' -> sb.append("&gt;");
+                case '"' -> sb.append("&quot;");
+                case '\'' -> sb.append("&#39;");
+                default -> sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 }
