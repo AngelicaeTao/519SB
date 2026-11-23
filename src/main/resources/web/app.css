@@ -1,0 +1,630 @@
+/* ===================================================================
+   519SB 视觉层（暗色 + 樱粉）
+   -------------------------------------------------------------------
+   引入方式：每个页面在 </head> 前加 <link rel="stylesheet" href="/app.css">
+   因为它排在页面内联 <style> 之后，同优先级的选择器会覆盖前者，
+   所以这里只需要写"皮肤"，不必重写布局。
+
+   个性化配色仍然生效：theme.js 注入的 :root 追加在 head 末尾，
+   比本文件更靠后，用户选的主题会覆盖这里的 --primary。
+   =================================================================== */
+
+:root {
+  --bg: #141414;
+  --bg-2: #1a1a1a;
+  --card: #1f1f1f;
+  --card-2: #262626;
+  --card-hover: #2a2a2a;
+  --line: #2b2b2b;
+  --text: #ffffff;
+  --text-2: #b0b0b0;
+  --text-3: #757575;
+
+  /* 主色：参考图为高饱和粉，比原「樱粉」更亮 */
+  --primary: #ff4d8d;
+  --primary-dark: #e63c7c;
+  --primary-light: rgba(255, 77, 141, 0.16);
+  --primary-fade: rgba(255, 77, 141, 0.08);
+
+  --r-card: 12px;
+  --r-img: 8px;
+  --r-pill: 999px;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --tabbar-h: 60px;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--bg) !important;
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+               "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* 给固定底栏留出空间，避免最后一条内容被挡住 */
+  padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px)) !important;
+  min-height: 100vh;
+}
+
+/* 暗色滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+a { color: var(--primary); }
+
+/* ============ 顶部栏 ============ */
+#header,
+.app-header {
+  background: rgba(20, 20, 20, 0.88) !important;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  box-shadow: none !important;
+  color: var(--text);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  padding: 12px 14px !important;
+}
+
+#header .title,
+.app-header .title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text);
+}
+
+#header .right { color: var(--text-2) !important; }
+
+#header .right a,
+#header .right button {
+  background: var(--card-2) !important;
+  border: 1px solid transparent !important;
+  color: var(--text-2) !important;
+  border-radius: var(--r-pill) !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  transition: background 0.15s, color 0.15s;
+}
+#header .right a:hover,
+#header .right button:hover {
+  background: var(--card-hover) !important;
+  color: var(--text) !important;
+}
+#header .right a.primary,
+#header .right button.primary,
+#header .right button.online-btn {
+  background: var(--primary) !important;
+  color: #fff !important;
+  border-color: transparent !important;
+}
+#header .right button.primary:hover { background: var(--primary-dark) !important; }
+#header .right button.online-btn { background: var(--card-2) !important; color: var(--primary) !important; }
+#header .right button.online-btn.active { background: var(--primary) !important; color: #fff !important; }
+
+/* 顶栏瘦身：参考图只有「标题 + 少量操作」。
+   聊天室、发帖、退出这些入口已经在底部导航和「我的」里，
+   继续挤在顶栏会让窄屏下按钮竖排换行、标题被压成两行。 */
+#header { gap: 10px; flex-wrap: nowrap !important; }
+#header .title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+#header .right {
+  flex-wrap: nowrap !important;
+  gap: 6px !important;
+  flex: 0 0 auto;
+}
+#header .right #new-btn,
+#header .right #my-nickname,
+#header .right a[href="/chat"],
+#header .right button[onclick="doLogout()"] {
+  display: none !important;
+}
+/* admin 链接保留（只有管理员会显示） */
+#header .right #admin-link { white-space: nowrap; }
+
+.my-avatar { background: var(--primary) !important; }
+
+/* ============ 卡片 ============ */
+.post-card,
+.card,
+.panel {
+  background: var(--card) !important;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card) !important;
+  box-shadow: none !important;
+  color: var(--text);
+}
+.post-card:hover { box-shadow: var(--shadow-sm) !important; border-color: #383838; }
+
+.post-card h2,
+.card h2 { color: var(--text) !important; }
+.post-card .excerpt { color: var(--text-2) !important; }
+.post-card .meta { color: var(--text-3) !important; }
+.post-card .meta a.author-link { color: var(--text-2) !important; }
+.post-card .meta a.author-link:hover { color: var(--primary) !important; }
+
+/* ============ 表单 ============ */
+input[type="text"],
+input[type="password"],
+input[type="search"],
+input[type="email"],
+textarea,
+select {
+  background: var(--card-2) !important;
+  border: 1px solid var(--line) !important;
+  color: var(--text) !important;
+  border-radius: 10px !important;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+input::placeholder,
+textarea::placeholder { color: var(--text-3) !important; }
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--primary) !important;
+  background: #2b2b2b !important;
+}
+select option { background: var(--card-2); color: var(--text); }
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 10px;
+  transition: background 0.15s, color 0.15s, opacity 0.15s;
+}
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 通用按钮皮肤：页面里没有专门 class 的按钮也会落到这里 */
+.btn,
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  padding: 9px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.btn-primary:hover { background: var(--primary-dark); }
+.btn-ghost {
+  background: var(--card-2);
+  color: var(--text-2);
+  border: 1px solid var(--line);
+  padding: 9px 16px;
+  font-size: 14px;
+}
+.btn-ghost:hover { background: var(--card-hover); color: var(--text); }
+
+/* ============ 胶囊 / 标签 ============ */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  background: var(--card-2);
+  color: var(--text-2);
+  font-size: 13px;
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pill:hover { background: var(--card-hover); color: var(--text); }
+.pill.active { background: var(--primary); color: #fff; font-weight: 600; }
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--primary-fade);
+  color: var(--primary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+/* ============ 底部导航 ============ */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  height: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: rgba(26, 26, 26, 0.94);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  align-items: center;
+  max-width: 100%;
+}
+
+.tabbar a,
+.tabbar button {
+  background: none;
+  border: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--text-3);
+  text-decoration: none;
+  font-size: 10px;
+  height: 100%;
+  padding: 0;
+  transition: color 0.15s;
+}
+.tabbar a.active,
+.tabbar a:hover { color: var(--primary); }
+.tabbar .tb-icon { width: 22px; height: 22px; display: block; }
+.tabbar .tb-icon svg { width: 100%; height: 100%; display: block; }
+
+/* 中间的发布按钮 */
+.tabbar .tb-fab {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6ba3, var(--primary));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  box-shadow: 0 6px 18px rgba(255, 77, 141, 0.42);
+  margin-top: -18px;
+  transition: transform 0.15s;
+}
+.tabbar .tb-fab:hover { transform: translateY(-2px) scale(1.04); }
+.tabbar .tb-fab svg { width: 22px; height: 22px; }
+
+/* ============ 列表页专用：双列卡片网格 ============ */
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (min-width: 720px) {
+  .grid-2 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+}
+@media (min-width: 1080px) {
+  .grid-2 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+.p-card {
+  position: relative;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.16s, border-color 0.16s, box-shadow 0.16s;
+  display: flex;
+  flex-direction: column;
+}
+.p-card:hover {
+  transform: translateY(-3px);
+  border-color: #3a3a3a;
+  box-shadow: var(--shadow);
+}
+
+.p-card .p-cover {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: linear-gradient(135deg, #2a2a2a, #1b1b1b);
+  overflow: hidden;
+}
+.p-card .p-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.3s;
+}
+.p-card:hover .p-cover img { transform: scale(1.04); }
+.p-card .p-cover .p-cover-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  opacity: 0.25;
+}
+
+/* 置顶角标 */
+.p-card .p-top {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: linear-gradient(90deg, #ff5c97, #ff4d8d);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px 6px 6px 2px;
+  letter-spacing: 0.5px;
+  z-index: 2;
+}
+
+.p-card .p-body { padding: 9px 10px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.p-card .p-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.9em;
+}
+.p-card .p-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.p-card .p-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: auto;
+}
+.p-card .p-meta .p-ava {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-size: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.p-card .p-meta .p-ava img { width: 100%; height: 100%; object-fit: cover; }
+.p-card .p-meta .spacer { margin-left: auto; }
+
+/* ============ 顶部公告 ============ */
+.notice-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, #ff4d8d, #ff7ab0);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(255, 77, 141, 0.25);
+}
+.notice-bar .nb-icon { flex: 0 0 auto; display: flex; }
+
+/* ============ 横向胶囊栏 ============ */
+.pill-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 10px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.pill-row::-webkit-scrollbar { display: none; }
+
+/* ============ 排序行 ============ */
+.sort-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-3);
+  padding: 2px 0 10px;
+}
+.sort-row .s-item { cursor: pointer; transition: color 0.15s; }
+.sort-row .s-item:hover { color: var(--text-2); }
+.sort-row .s-item.active { color: var(--primary); font-weight: 600; }
+.sort-row .s-sep { color: #3a3a3a; }
+
+/* ============ 空状态 ============ */
+.empty {
+  text-align: center;
+  color: var(--text-3) !important;
+  padding: 60px 20px !important;
+}
+
+/* ============ 模态框 ============ */
+.mask { background: rgba(0, 0, 0, 0.66) !important; }
+.modal {
+  background: var(--card) !important;
+  border: 1px solid var(--line);
+  border-radius: 16px !important;
+  color: var(--text);
+}
+
+/* ============ 侧边抽屉 ============ */
+#sidebar {
+  background: var(--bg-2) !important;
+  color: var(--text);
+  border-left: 1px solid var(--line);
+}
+
+/* ============ 图片预览 ============ */
+#image-preview { background: rgba(0, 0, 0, 0.9) !important; }
+
+/* ============ 移动端细节 ============ */
+@media (max-width: 560px) {
+  #header, .app-header { padding: 10px 12px !important; }
+  .container { padding: 0 12px !important; margin: 14px auto !important; }
+}
+
+/* ===================================================================
+   逐页皮肤补丁
+   这些页面各自的类名不同，统一在这里收口，避免在 8 个模板里散落改动。
+   =================================================================== */
+
+/* ---------- 帖子详情 ---------- */
+.post,
+.comments { background: var(--card) !important; border: 1px solid var(--line); box-shadow: none !important; }
+.post h1,
+.comments-title { color: var(--text) !important; }
+.post .meta { color: var(--text-3) !important; border-bottom-color: var(--line) !important; }
+.post .content,
+.comment-text,
+.reply-text { color: var(--text-2) !important; }
+.comment-nick,
+.reply-nick { color: var(--text) !important; }
+.actions { border-top-color: var(--line) !important; }
+.actions .btn-gray { background: var(--card-2) !important; color: var(--text-2) !important; }
+.actions .btn-red { background: #d9434a !important; }
+.comment-op, .reply-op { color: var(--text-3) !important; }
+.like-btn {
+  background: var(--card-2) !important;
+  color: var(--text-2) !important;
+  border-color: var(--line) !important;
+  box-shadow: none !important;
+}
+.like-btn.liked {
+  background: var(--primary-light) !important;
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+.cmt-attach button.pick {
+  background: var(--card-2) !important;
+  color: var(--text-2) !important;
+  border-color: var(--line) !important;
+}
+.reply-form { background: var(--card-2) !important; }
+.comment-form textarea {
+  background: var(--card-2) !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+.comment-tip { color: var(--text-3) !important; }
+.cmt-thumb img { border-color: var(--line) !important; }
+/* 窄屏下按钮文字容易被挤成竖排 */
+.actions button,
+.comment-form-actions button,
+.cmt-attach button { white-space: nowrap; }
+
+/* ---------- 个人中心 / 管理后台 ---------- */
+.card h2 { color: var(--text) !important; border-bottom-color: var(--line) !important; }
+.theme-swatch {
+  background: var(--card-2) !important;
+  color: var(--text-2) !important;
+  border-color: var(--line) !important;
+}
+.theme-swatch.on {
+  background: var(--primary-light) !important;
+  color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+.theme-tip { color: var(--text-3) !important; }
+.form-row input:disabled { background: var(--bg-2) !important; color: var(--text-3) !important; }
+.preview-actions button { background: var(--card-2) !important; color: var(--text-2) !important; }
+.msg-item:hover { background: var(--card-2) !important; }
+.badge { border-radius: var(--r-pill); }
+
+/* ---------- 聊天室 ---------- */
+/* 聊天室是 100vh 的 flex 布局，底栏用 fixed 盖在上面，
+   所以不能靠 body 的 padding 让位，得把输入区自己抬起来 */
+body:has(#input-area) { padding-bottom: 0 !important; }
+#chat-box { background: var(--bg) !important; }
+#input-area {
+  background: var(--bg-2) !important;
+  border-top: 1px solid var(--line);
+  box-shadow: none !important;
+  margin-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom, 0px));
+}
+#input {
+  background: var(--card-2) !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+}
+#plus-btn {
+  background: var(--card-2) !important;
+  border-color: var(--line) !important;
+  color: var(--text-2) !important;
+}
+#sidebar { background: var(--bg-2) !important; }
+.online-user { color: var(--text-2) !important; }
+.online-user .avatar { background: #3a3a3a !important; }
+
+/* 聊天室右下角的悬浮按钮组与屏幕共享提示条 */
+#float-buttons button {
+  background: rgba(38, 38, 38, 0.94) !important;
+  color: var(--text-2) !important;
+  border: 1px solid var(--line) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+#float-buttons button:hover { color: var(--primary) !important; }
+#screen-notice {
+  background: var(--card) !important;
+  border-color: var(--line) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow) !important;
+}
+#screen-notice button.ghost { background: var(--card-2) !important; color: var(--text-2) !important; border-color: var(--line) !important; }
+#screen-panel { background: var(--card) !important; border-color: var(--line) !important; }
+#screen-panel .screen-head { color: var(--text) !important; }
+#screen-panel .screen-body { background: #0d0d0d !important; }
+#voice-btn {
+  background: var(--card-2) !important;
+  border-color: var(--line) !important;
+  color: var(--text-2) !important;
+}
+#plus-menu {
+  background: var(--card) !important;
+  border-color: var(--line) !important;
+  box-shadow: var(--shadow) !important;
+}
+.plus-item { background: transparent !important; color: var(--text-2) !important; }
+.plus-item:hover { background: var(--card-2) !important; }
+/* 聊天气泡 */
+.msg.self .bubble { background: var(--primary) !important; color: #fff !important; }
+.msg.other .bubble { background: var(--card-2) !important; color: var(--text) !important; }
+.msg .meta { color: var(--text-3) !important; }
+/* 图标按钮：SVG 需要居中 */
+#voice-btn,
+#plus-menu button.plus-item { display: inline-flex; align-items: center; justify-content: center; }
+#voice-btn svg, #plus-menu button.plus-item svg { display: block; }
+
+/* ---------- 他人主页 ---------- */
+.nick-line { color: var(--text) !important; }
+.info-row .k { color: var(--text-3) !important; }
+.info-row .v { color: var(--text) !important; }
+.nick-item { color: var(--text-2) !important; border-bottom-color: var(--line) !important; }
+.nick-item .nick-time { color: var(--text-3) !important; }
+#header h1 { color: var(--text) !important; }
+.stat-item, .stat-box { color: var(--text-2) !important; }
+
+/* ---------- 管理后台表格 ---------- */
+/* 六列在窄屏下会把表头和按钮挤成竖排，改成容器内横向滚动 */
+.table-scroll { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-scroll table { min-width: 580px; border-collapse: collapse; }
+.table-scroll th,
+.table-scroll td { white-space: nowrap; }
+.table-scroll th { color: var(--text-3) !important; font-weight: 500; }
+.table-scroll td { color: var(--text-2) !important; border-color: var(--line) !important; }
+.table-scroll td button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 12px;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+.table-scroll .badge { background: var(--primary-light) !important; color: var(--primary) !important; }

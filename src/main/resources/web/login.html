@@ -6,7 +6,7 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(160deg, #232323 0%, #141414 55%, #2a1620 100%);
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
     padding: 20px;
   }
@@ -14,7 +14,7 @@
     background: #fff; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
     width: 100%; max-width: 380px; padding: 32px 28px;
   }
-  h1 { text-align: center; font-size: 22px; color: #333; margin-bottom: 6px; }
+  h1 { text-align: center; font-size: 22px; color: var(--text); margin-bottom: 6px; }
   .subtitle { text-align: center; font-size: 13px; color: #999; margin-bottom: 24px; }
   .tabs { display: flex; border-bottom: 1px solid #eee; margin-bottom: 22px; }
   .tab {
@@ -22,7 +22,7 @@
     font-size: 14px; color: #666; border-bottom: 2px solid transparent;
     transition: all 0.2s;
   }
-  .tab.active { color: #667eea; border-bottom-color: #667eea; font-weight: 500; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 500; }
   .form { display: none; }
   .form.active { display: block; }
   input {
@@ -30,13 +30,13 @@
     border: 1px solid #ddd; border-radius: 8px; margin-bottom: 12px;
     outline: none; transition: border 0.2s;
   }
-  input:focus { border-color: #667eea; }
+  input:focus { border-color: var(--primary); }
   button {
     width: 100%; padding: 12px; font-size: 15px; font-weight: 500;
-    background: #667eea; color: #fff; border: none; border-radius: 8px;
+    background: var(--primary); color: #fff; border: none; border-radius: 8px;
     cursor: pointer; transition: background 0.2s;
   }
-  button:hover { background: #5568d3; }
+  button:hover { background: var(--primary-dark); }
   button:disabled { background: #ccc; cursor: not-allowed; }
   .msg {
     padding: 10px 14px; border-radius: 8px; font-size: 13px;
@@ -49,7 +49,7 @@
 
   /* 账号格式提示 */
   .field-hint { font-size: 11px; color: #999; margin: -8px 0 12px 2px; line-height: 1.5; }
-  .field-hint b { color: #667eea; font-weight: 500; }
+  .field-hint b { color: var(--primary); font-weight: 500; }
 
   /* 密码框的显示/隐藏切换 */
   .pw-wrap { position: relative; }
@@ -60,9 +60,9 @@
     background: none; border: none; border-radius: 6px;
     color: #999; cursor: pointer;
   }
-  .pw-toggle:hover { background: none; color: #667eea; }
-  .pw-toggle.on { color: #667eea; }
-</style></head><body>
+  .pw-toggle:hover { background: none; color: var(--primary); }
+  .pw-toggle.on { color: var(--primary); }
+</style><link rel="stylesheet" href="/app.css"></head><body>
 <div class="card">
   <h1>519SB 聊天室</h1>
   <p class="subtitle">登录后开始聊天</p>

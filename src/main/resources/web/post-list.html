@@ -159,7 +159,8 @@
   .preview-actions button { background: #fff; color: #333; }
 </style>
 <script src="/theme.js"></script>
-<script src="/media.js"></script></head><body>
+<script src="/media.js"></script>
+<link rel="stylesheet" href="/app.css"></head><body>
 <div id="header">
   <span class="title">519SB 帖子</span>
   <div class="right">
@@ -172,6 +173,15 @@
     <button onclick="doLogout()">退出</button>
   </div>
 </div>
+<div class="container" style="padding-bottom:0;">
+  <div class="notice-bar">
+    <span class="nb-icon">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 8v5"/><circle cx="12" cy="16.5" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="9"/></svg>
+    </span>
+    <span>欢迎来到 519SB · 发帖、聊天、屏幕共享，都在这里</span>
+  </div>
+</div>
+
 <div class="search-bar">
   <input type="text" id="search-input" placeholder="搜索帖子（标题 / 内容 / 作者）" maxlength="60">
   <select id="search-field" title="搜索范围">
@@ -180,12 +190,28 @@
     <option value="content">内容</option>
     <option value="author">作者</option>
   </select>
-  <button id="search-btn">搜索</button>
-  <button id="search-clear" class="ghost" style="display:none;">返回列表</button>
+  <button id="search-btn" class="btn-primary">搜索</button>
+  <button id="search-clear" class="btn-ghost" style="display:none;">返回</button>
 </div>
 <div class="search-hint" id="search-hint" style="display:none;"></div>
 
-<div class="container" id="list"></div>
+<div class="container" style="padding-bottom:0;padding-top:4px;">
+  <div class="pill-row" id="filter-row">
+    <button type="button" class="pill active" data-filter="all">最新发布</button>
+    <button type="button" class="pill" data-filter="image">有图</button>
+    <button type="button" class="pill" data-filter="hot">热帖</button>
+    <button type="button" class="pill" data-filter="new">新帖</button>
+  </div>
+  <div class="sort-row">
+    <span class="s-item active" id="sort-label">排序</span>
+    <span class="s-sep">|</span>
+    <span class="s-item" id="sort-newest">最新</span>
+    <span class="s-item" id="sort-views">浏览</span>
+    <span class="s-item" id="sort-likes">点赞</span>
+  </div>
+</div>
+
+<div class="container grid-2" id="list" style="margin-top:0;"></div>
 
 <div id="sidebar-mask" onclick="toggleSidebar(false)"></div>
 <div id="sidebar">
@@ -509,62 +535,148 @@ document.getElementById('search-field').addEventListener('change', function () {
   if (searchKeyword) doSearch();
 });
 
+// 列表筛选状态：全部 / 有图 / 热帖 / 新帖 / 点赞
+var filterMode = 'all';
+var lastPosts = [];
+
+function applyFilter(posts) {
+  var arr = posts.slice();
+  if (filterMode === 'image') {
+    arr = arr.filter(function (p) { return getImageIds(p.images).length > 0; });
+  } else if (filterMode === 'hot') {
+    arr.sort(function (a, b) { return (b.views || 0) - (a.views || 0); });
+  } else if (filterMode === 'new') {
+    arr.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+  } else if (filterMode === 'likes') {
+    arr.sort(function (a, b) { return (b.likeCount || 0) - (a.likeCount || 0); });
+  }
+  return arr;
+}
+
+function fmtViews(n) {
+  n = n || 0;
+  if (n >= 10000) return (n / 10000).toFixed(1) + 'w';
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+  return String(n);
+}
+
 function renderList(posts) {
   const box = document.getElementById('list');
+  lastPosts = posts || [];
+  const list = applyFilter(lastPosts);
   box.innerHTML = '';
-  if (!posts || posts.length === 0) {
+  if (!list || list.length === 0) {
     // 区分"一篇都没有"和"搜不到"，否则用户会以为论坛是空的
     box.innerHTML = searchKeyword
       ? '<div class="empty">没有匹配的帖子，换个关键词试试</div>'
-      : '<div class="empty">还没有帖子，点右上角发一篇吧~</div>';
+      : '<div class="empty">还没有帖子，点下面的 + 发一篇吧~</div>';
     return;
   }
-  posts.forEach(p => {
+  list.forEach(p => {
     const card = document.createElement('div');
-    card.className = 'post-card';
-
-    const h2 = document.createElement('h2');
-    h2.textContent = p.title;
-
-    const ex = document.createElement('div');
-    ex.className = 'excerpt';
-    ex.textContent = p.content.length > 100 ? p.content.substring(0, 100) + '...' : p.content;
+    card.className = 'p-card';
 
     const ids = getImageIds(p.images);
-    let thumbs = null;
+
+    // 封面：有图用第一张，没图给个渐变占位
+    const cover = document.createElement('div');
+    cover.className = 'p-cover';
     if (ids.length > 0) {
-      thumbs = document.createElement('div');
-      thumbs.className = 'thumb-strip';
-      ids.slice(0, 3).forEach(id => {
-        const img = document.createElement('img');
-        img.src = '/image/' + id;
-        img.onclick = (e) => { e.stopPropagation(); openPreview(id); };
-        thumbs.appendChild(img);
-      });
+      const img = document.createElement('img');
+      img.src = '/image/' + ids[0];
+      img.loading = 'lazy';
+      img.alt = '';
+      cover.appendChild(img);
+    } else {
+      // 没有配图时用标题首字做占位，比一个空灰块更有辨识度
+      const ph = document.createElement('div');
+      ph.className = 'p-cover-empty';
+      ph.textContent = (p.title || '·').slice(0, 1);
+      ph.style.cssText = 'font-size:42px;font-weight:800;color:rgba(255,77,141,.35);opacity:1;';
+      cover.appendChild(ph);
     }
 
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    // 作者做成进主页的链接。卡片本身整块可点（进帖子），所以要挡住冒泡，
-    // 否则点作者会同时触发卡片跳转。
-    const a = document.createElement('a');
-    a.className = 'author-link';
-    a.href = '/user/' + encodeURIComponent(p.author) + '?token=' + encodeURIComponent(TOKEN);
-    a.textContent = 'by ' + (p.authorNickname || p.author);
-    a.onclick = (ev) => ev.stopPropagation();
-    const t = document.createElement('span'); t.textContent = fmtTime(p.createdAt);
-    const v = document.createElement('span'); v.textContent = p.views + ' 阅读';
-    const l = document.createElement('span'); l.textContent = '❤ ' + (p.likeCount || 0);
-    meta.appendChild(a); meta.appendChild(t); meta.appendChild(v); meta.appendChild(l);
+    const body = document.createElement('div');
+    body.className = 'p-body';
 
-    card.appendChild(h2);
-    card.appendChild(ex);
-    if (thumbs) card.appendChild(thumbs);
-    card.appendChild(meta);
+    const title = document.createElement('div');
+    title.className = 'p-title';
+    title.textContent = p.title;
+
+    const tags = document.createElement('div');
+    tags.className = 'p-tags';
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = ids.length > 1 ? '#' + ids.length + ' 图' : (ids.length ? '#图片' : '#文字');
+    tags.appendChild(tag);
+
+    const meta = document.createElement('div');
+    meta.className = 'p-meta';
+    // 作者头像：没有头像图就用昵称首字；整块可点（进帖子），作者名单独挡冒泡
+    const ava = document.createElement('span');
+    ava.className = 'p-ava';
+    ava.textContent = (p.authorNickname || p.author || '?').slice(0, 1);
+    const name = document.createElement('span');
+    name.textContent = p.authorNickname || p.author;
+    name.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70px;';
+    name.onclick = function (ev) {
+      ev.stopPropagation();
+      location.href = '/user/' + encodeURIComponent(p.author) + '?token=' + encodeURIComponent(TOKEN);
+    };
+    const spacer = document.createElement('span');
+    spacer.className = 'spacer';
+    const views = document.createElement('span');
+    views.textContent = '👁 ' + fmtViews(p.views);
+
+    meta.appendChild(ava);
+    meta.appendChild(name);
+    meta.appendChild(spacer);
+    meta.appendChild(views);
+
+    body.appendChild(title);
+    body.appendChild(tags);
+    body.appendChild(meta);
+
+    card.appendChild(cover);
+    card.appendChild(body);
     card.onclick = () => location.href = '/posts/' + p.id;
     box.appendChild(card);
   });
 }
+
+// 分类胶囊：切换筛选条件后重渲染，不重新请求
+(function () {
+  var row = document.getElementById('filter-row');
+  if (!row) return;
+  row.addEventListener('click', function (e) {
+    var btn = e.target.closest('.pill');
+    if (!btn) return;
+    filterMode = btn.getAttribute('data-filter');
+    Array.prototype.forEach.call(row.querySelectorAll('.pill'), function (b) {
+      b.classList.toggle('active', b === btn);
+    });
+    renderList(lastPosts);
+  });
+})();
+
+// 排序行与胶囊联动，避免两套控件显示互相矛盾的状态
+(function () {
+  function setSort(mode) {
+    filterMode = mode;
+    var row = document.getElementById('filter-row');
+    if (!row) return;
+    Array.prototype.forEach.call(row.querySelectorAll('.pill'), function (b) {
+      b.classList.toggle('active', b.getAttribute('data-filter') === mode);
+    });
+    renderList(lastPosts);
+  }
+  var n = document.getElementById('sort-newest');
+  var v = document.getElementById('sort-views');
+  var l = document.getElementById('sort-likes');
+  if (n) n.onclick = function () { setSort('new'); };
+  if (v) v.onclick = function () { setSort('hot'); };
+  if (l) l.onclick = function () { setSort('likes'); };
+})();
 
 function openEdit() {
   editImages = [];
@@ -753,4 +865,5 @@ document.addEventListener('keydown', (e) => {
 
 document.getElementById('new-btn').onclick = openEdit;
 loadList();
-</script></body></html>
+</script>
+<script src="/app.js"></script></body></html>

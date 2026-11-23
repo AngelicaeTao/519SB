@@ -250,6 +250,18 @@ public class HttpUtil {
         }
     }
 
+    /** 返回静态 CSS 资源（与 JS 一样可缓存，不含用户数据） */
+    public static void sendCss(HttpExchange ex, int status, String css) throws IOException {
+        applySecurityHeaders(ex);
+        ex.getResponseHeaders().set("Content-Type", "text/css; charset=utf-8");
+        ex.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
+        byte[] bytes = css.getBytes(StandardCharsets.UTF_8);
+        ex.sendResponseHeaders(status, bytes.length);
+        try (OutputStream os = ex.getResponseBody()) {
+            writeOut(ex, os, bytes);
+        }
+    }
+
     /** 返回 JSON 响应（带敏感数据，禁止缓存） */
     public static void sendJson(HttpExchange ex, int status, String json) throws IOException {
         applySecurityHeaders(ex);

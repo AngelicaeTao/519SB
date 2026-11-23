@@ -113,7 +113,7 @@
   .pw-toggle:hover { background: none; color: var(--primary); }
   .pw-toggle.on { color: var(--primary); }
 </style>
-<script src="/theme.js"></script></head><body>
+<script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head><body>
 <div id="header">
   <h1>管理员控制台</h1>
   <div><a href="/chat">返回聊天</a></div>
@@ -125,6 +125,7 @@
       <button class="btn btn-red" onclick="clearAllMessages()">清空所有消息</button>
     </h2>
     <div id="list-msg" class="msg"></div>
+    <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -138,6 +139,7 @@
       </thead>
       <tbody id="user-list"></tbody>
     </table>
+    </div>
   </div>
 </div>
 
@@ -712,4 +714,4 @@ function initPasswordToggles() {
 initPasswordToggles();
 
 loadUsers();
-</script></body></html>
+</script><script src="/app.js"></script></body></html>

@@ -27,7 +27,7 @@ public final class Theme {
     /** 主题名 -> [primary, dark, light, fade] */
     private static final Map<String, String[]> VARS = new LinkedHashMap<>();
 
-    public static final String DEFAULT_THEME = "green";
+    public static final String DEFAULT_THEME = "pink";
 
     static {
         // 每个主题提供四个变量：
@@ -39,7 +39,7 @@ public final class Theme {
         put("blue",   "天空蓝", "#2f80ed", "#1f6ad4", "#e8f1fd", "#f2f7fe");
         put("purple", "薰衣紫", "#7c5cf0", "#6a49dc", "#efeafd", "#f5f2fe");
         put("orange", "暖阳橙", "#f2913d", "#d97d2c", "#fdf0e4", "#fef6ef");
-        put("pink",   "樱粉",   "#ec5f8f", "#d44d7a", "#fdeaf1", "#fef2f6");
+        put("pink",   "樱粉",   "#ff4d8d", "#e63c7c", "#ffe3ee", "#fff2f7");
         put("red",    "胭脂红", "#e5484d", "#c93b40", "#fdeaea", "#fef3f3");
     }
 

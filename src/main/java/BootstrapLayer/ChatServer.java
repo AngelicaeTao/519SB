@@ -150,15 +150,22 @@ public class ChatServer {
         // 真正的约束是「只有当前分享者能提交帧」+ 服务端按目标帧率节流。
         server.createContext("/screen", wrapScreen(screenHandler::handle, limiter, MAX_BODY_SCREEN));
 
-        // 前端共用脚本。都是静态资源、不含用户数据：
+        // 前端共用脚本与样式。都是静态资源、不含用户数据：
         //   theme.js  按 localStorage 里的配色偏好注入覆盖样式
         //   media.js  动态图识别与上传（聊天/帖子/评论共用）
-        for (String asset : new String[]{"theme.js", "media.js"}) {
+        //   app.css   暗色视觉层（每页在 </head> 前引入）
+        //   app.js    底部导航栏注入（每页在 </body> 前引入）
+        for (String asset : new String[]{"theme.js", "media.js", "app.css", "app.js"}) {
             final String name = asset;
             server.createContext("/" + name, ex -> {
                 try {
                     if (HttpUtil.rejectWrongMethod(ex, "GET")) return;
-                    HttpUtil.sendJs(ex, 200, InfrastructureLayer.WebResources.load(name));
+                    String body = InfrastructureLayer.WebResources.load(name);
+                    if (name.endsWith(".css")) {
+                        HttpUtil.sendCss(ex, 200, body);
+                    } else {
+                        HttpUtil.sendJs(ex, 200, body);
+                    }
                 } catch (IOException e) {
                     ex.close();
                 }

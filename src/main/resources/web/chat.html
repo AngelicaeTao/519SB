@@ -540,7 +540,7 @@
   .preview-actions button { background: #fff; color: #333; }
 </style>
 <script src="/theme.js"></script>
-<script src="/media.js"></script></head><body>
+<script src="/media.js"></script><link rel="stylesheet" href="/app.css"></head><body>
 <div id="header">
   <span class="title">519SB-Chat</span>
   <div class="right">
@@ -641,16 +641,16 @@
   <div id="reply-bar"><span class="rb-name"></span><span class="rb-text"></span><span class="rb-close" onclick="clearReply()">✕</span></div>
   <div id="rec-bar"><span id="rec-dot"></span><span id="rec-time">0:00</span><span class="rb-text">正在录音…点麦克风结束并发送，点 ✕ 取消</span><span class="rb-close" onclick="cancelRecording()" title="取消录音">✕</span></div>
   <div id="up-bar"><span id="up-text">正在上传…</span><span id="up-track"><span id="up-fill"></span></span></div>
-  <textarea id="input" placeholder="输入消息...（Shift + Enter 换行，Enter 发送，@ 可提醒）" autocomplete="off"></textarea>
+  <textarea id="input" placeholder="输入消息…" autocomplete="off"></textarea>
   <input type="file" id="image-input" accept="image/*" style="display: none;">
   <input type="file" id="file-input" style="display: none;">
   <button id="plus-btn" title="发送图片 / 文件">＋</button>
   <div id="plus-menu">
-    <button type="button" class="plus-item" data-act="image" title="图片 / 动图">🖼️</button>
-    <button type="button" class="plus-item" data-act="file" title="文件">📎</button>
-    <button type="button" class="plus-item" data-act="screen" title="分享屏幕">🖥️</button>
+    <button type="button" class="plus-item" data-act="image" title="图片 / 动图"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4.5 4.5L17 13l3 3"/></svg></button>
+    <button type="button" class="plus-item" data-act="file" title="文件"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></svg></button>
+    <button type="button" class="plus-item" data-act="screen" title="分享屏幕"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></button>
   </div>
-  <button id="voice-btn" title="点击开始录音，再点结束并发送">🎤</button>
+  <button id="voice-btn" title="点击开始录音，再点结束并发送"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg></button>
   <button id="send-btn">发送</button>
   <div id="mention-dropdown"></div>
 </div>
@@ -1277,7 +1277,7 @@ function buildFileCard(mediaId, fileName) {
 
   var icon = document.createElement('span');
   icon.className = 'fc-icon';
-  icon.textContent = '📎';
+  icon.textContent = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></svg>';
 
   var meta = document.createElement('div');
   meta.className = 'fc-meta';
@@ -2148,7 +2148,7 @@ function resetRecUi() {
   if (recAutoStop) { clearTimeout(recAutoStop); recAutoStop = null; }
   var btn = document.getElementById('voice-btn');
   btn.classList.remove('recording');
-  btn.textContent = '🎤';
+  btn.textContent = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg>';
   btn.disabled = false;
   document.getElementById('rec-bar').classList.remove('show');
 }
@@ -2201,7 +2201,7 @@ function uploadAndSendVoice(blob) {
     } finally {
       sending = false;
       btn.disabled = false;
-      btn.textContent = '🎤';
+      btn.textContent = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg>';
       if (sendBtn) sendBtn.disabled = false;
     }
   };
@@ -2834,4 +2834,4 @@ document.getElementById('screen-hide-btn').onclick = function () {
   // 收起面板时如果不在分享，就顺便断开观看连接，避免白白占带宽
   if (!screenSharing) stopWatching();
 };
-</script></body></html>
+</script><script src="/app.js"></script></body></html>

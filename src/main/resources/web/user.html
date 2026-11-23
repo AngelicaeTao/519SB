@@ -64,7 +64,7 @@
   }
   .empty { color: #999; font-size: 12px; padding: 6px 0; }
 </style>
-<script src="/theme.js"></script></head><body>
+<script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head><body>
 <div id="header">
   <h1>用户主页</h1>
   <div class="nav">
@@ -98,7 +98,7 @@
 
   <div class="card">
     <div class="info-row" style="border-bottom:1px solid #eee;margin-bottom:6px;">
-      <span class="k" style="font-size:13px;color:#333;font-weight:500;">历史昵称</span>
+      <span class="k" style="font-size:13px;color:var(--text-2);font-weight:500;">历史昵称</span>
       <span class="k" id="u-nickcount2"></span>
     </div>
     <div id="u-nicklist"></div>
@@ -199,4 +199,4 @@ function renderHistory() {
 }
 
 render();
-</script></body></html>
+</script><script src="/app.js"></script></body></html>
