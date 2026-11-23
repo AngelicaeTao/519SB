@@ -242,7 +242,10 @@ public class HttpUtil {
     public static void sendJs(HttpExchange ex, int status, String js) throws IOException {
         applySecurityHeaders(ex);
         ex.getResponseHeaders().set("Content-Type", "application/javascript; charset=utf-8");
-        ex.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
+        // 不设 max-age：这些文件没有版本号，设了强缓存后用户端会拿着一小时前的
+        // 旧 app.js / app.css，改完样式刷新也看不到变化。no-cache 允许存副本，
+        // 但每次必须回源确认，几十 KB 的静态资源不值得为它牺牲"改了就生效"。
+        ex.getResponseHeaders().set("Cache-Control", "no-cache");
         byte[] bytes = js.getBytes(StandardCharsets.UTF_8);
         ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {
@@ -254,7 +257,10 @@ public class HttpUtil {
     public static void sendCss(HttpExchange ex, int status, String css) throws IOException {
         applySecurityHeaders(ex);
         ex.getResponseHeaders().set("Content-Type", "text/css; charset=utf-8");
-        ex.getResponseHeaders().set("Cache-Control", "public, max-age=3600");
+        // 不设 max-age：这些文件没有版本号，设了强缓存后用户端会拿着一小时前的
+        // 旧 app.js / app.css，改完样式刷新也看不到变化。no-cache 允许存副本，
+        // 但每次必须回源确认，几十 KB 的静态资源不值得为它牺牲"改了就生效"。
+        ex.getResponseHeaders().set("Cache-Control", "no-cache");
         byte[] bytes = css.getBytes(StandardCharsets.UTF_8);
         ex.sendResponseHeaders(status, bytes.length);
         try (OutputStream os = ex.getResponseBody()) {

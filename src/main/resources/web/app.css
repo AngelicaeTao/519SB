@@ -18,7 +18,7 @@
   --line: #2b2b2b;
   --text: #ffffff;
   --text-2: #b0b0b0;
-  --text-3: #757575;
+  --text-3: #8f8f8f;
 
   /* 主色：参考图为高饱和粉，比原「樱粉」更亮 */
   --primary: #ff4d8d;
@@ -155,10 +155,10 @@ a { color: var(--primary); }
 .post-card .meta a.author-link:hover { color: var(--primary) !important; }
 
 /* ============ 表单 ============ */
-input[type="text"],
-input[type="password"],
-input[type="search"],
-input[type="email"],
+/* 除开这些本来就该保留原生外观的类型，其余输入控件统一暗色底 + 亮色字。
+   早先只列了 text/password/search/email，导致没写 type 的 input、
+   number/url/tel/date 等漏网，浏览器默认白底直接糊在暗色页面上。 */
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="image"]),
 textarea,
 select {
   background: var(--card-2) !important;
@@ -166,15 +166,30 @@ select {
   color: var(--text) !important;
   border-radius: 10px !important;
   outline: none;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+/* 浏览器自动填充：Chrome/Safari 会强行刷成浅黄或纯白底，把文字吞掉。
+   只能靠内阴影盖住背景，再用 -webkit-text-fill-color 保住文字颜色。 */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--card-2) inset !important;
+  box-shadow: 0 0 0 1000px var(--card-2) inset !important;
+  caret-color: var(--text);
+  transition: background-color 100000s ease-in-out 0s;
 }
 input::placeholder,
-textarea::placeholder { color: var(--text-3) !important; }
+textarea::placeholder { color: #8a8a8a !important; opacity: 1; }
 input:focus,
 textarea:focus,
 select:focus {
   border-color: var(--primary) !important;
   background: #2b2b2b !important;
+  box-shadow: 0 0 0 3px var(--primary-light) !important;
 }
 select option { background: var(--card-2); color: var(--text); }
 
@@ -279,13 +294,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #ff6ba3, var(--primary));
+  /* 用主色 + 白色高光，换主题时不会留下写死的粉色 */
+  background: var(--primary);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   justify-self: center;
-  box-shadow: 0 6px 18px rgba(255, 77, 141, 0.42);
+  box-shadow: 0 8px 18px -6px var(--primary);
   margin-top: -18px;
   transition: transform 0.15s;
 }
@@ -410,7 +427,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(255, 77, 141, 0.25);
+  box-shadow: 0 6px 16px -6px var(--primary);
 }
 .notice-bar .nb-icon { flex: 0 0 auto; display: flex; }
 
@@ -559,6 +576,89 @@ body:has(#input-area) { padding-bottom: 0 !important; }
   border-color: var(--line) !important;
   color: var(--text-2) !important;
 }
+
+/* 输入区两个图标按钮固定成方块：
+   录音时按钮内容变成 ■，宽度会跟着字符收缩，一按一放界面就抖一下。 */
+#voice-btn,
+#plus-btn {
+  min-width: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+#voice-btn svg, #plus-btn svg { display: block; }
+/* 录音中：按钮变红。页面自己写了 #voice-btn.recording，但被上面那条
+   background !important 压掉了，红色一直没生效。 */
+#voice-btn.recording {
+  background: #e5484d !important;
+  border-color: #e5484d !important;
+  color: #fff !important;
+}
+#voice-btn.recording:hover { border-color: #e5484d !important; }
+
+/* ============ 语音消息气泡 ============ */
+/* 时长由前端解码算出（见 chat.html 的 buildVoicePlayer），
+   颜色用 currentColor 跟着气泡走：自己发的粉底上是白字，别人灰底上是浅灰字。 */
+.voice-bubble {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 148px;
+  max-width: 240px;
+  padding: 2px 2px 2px 0;
+}
+.vb-btn {
+  flex: 0 0 32px;
+  width: 32px; height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: currentColor;
+  cursor: pointer;
+  transition: transform .12s, opacity .12s;
+}
+.vb-btn:active { transform: scale(.94); }
+.vb-btn svg { width: 14px; height: 14px; display: block; }
+/* 自己发的气泡是主色底：按钮用白底 + 深色图标才压得住；
+   别人的气泡是灰底：按钮用主色实心圆 + 白图标。 */
+.voice-bubble .vb-btn { background: rgba(255, 255, 255, .94); color: #c8225f; }
+.msg.other .voice-bubble .vb-btn { background: var(--primary); color: #fff; }
+
+.vb-bars {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.vb-bars i {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: .5;
+  transition: opacity .2s;
+}
+.vb-bars.playing i { opacity: .9; animation: vb-pulse 1s ease-in-out infinite; }
+.vb-bars.playing i:nth-child(2n) { animation-delay: .15s; }
+.vb-bars.playing i:nth-child(3n) { animation-delay: .3s; }
+@keyframes vb-pulse { 0%,100% { transform: scaleY(.7); } 50% { transform: scaleY(1.15); } }
+
+.vb-dur {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  opacity: .85;
+  padding-right: 4px;
+  white-space: nowrap;
+}
+
 #sidebar { background: var(--bg-2) !important; }
 .online-user { color: var(--text-2) !important; }
 .online-user .avatar { background: #3a3a3a !important; }
@@ -628,3 +728,306 @@ body:has(#input-area) { padding-bottom: 0 !important; }
   white-space: nowrap;
 }
 .table-scroll .badge { background: var(--primary-light) !important; color: var(--primary) !important; }
+
+/* ==================== 底栏「我的」：常驻登录身份 ==================== */
+/*
+ * 登录状态不清楚的根源之一是界面上没有任何"我是谁"的持续标识。
+ * 这里把底栏最后一项换成头像 + 昵称，任何页面任何时刻都能确认身份。
+ */
+.tabbar #app-me .tb-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+.tabbar #app-me.signed .tb-icon {
+  background: var(--card-2);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.tabbar #app-me.signed.active .tb-icon {
+  background: var(--primary-light);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+.tabbar #app-me .tb-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.tabbar #app-me-name {
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 登出原因提示（登录页顶部） */
+.login-notice {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--primary-fade);
+  border: 1px solid var(--primary-light);
+  color: #ffb3cd;
+}
+
+/* ---------- 个人中心：历史昵称 ---------- */
+/* 页面原样式是浅色时代的 #f0f0f0 上边框，在暗底上是一条刺眼白线 */
+.nick-history { border-top-color: var(--line) !important; }
+.nick-history-head { color: var(--text-2) !important; }
+.nick-history-count { color: var(--text-3) !important; }
+.nick-empty { color: var(--text-3) !important; }
+
+/* ---------- 管理后台：消息列表分隔线 ---------- */
+.msg-toolbar,
+.msg-item { border-bottom-color: var(--line) !important; }
+.msg-item .time { color: var(--text-3) !important; }
+.msg-toolbar { color: var(--text-2) !important; }
+.empty-tip { color: var(--text-3) !important; }
+
+/* ---------- 聊天室：顶栏的次级按钮 ---------- */
+#header .right a {
+  background: var(--card-2) !important;
+  border-color: var(--line) !important;
+  color: var(--text-2) !important;
+  border-radius: 10px;
+}
+#header .right a:hover { color: var(--primary) !important; }
+
+/* 管理后台表头：原来只覆盖了 td 的边框色，th 的 #eee 留在暗底上是一条白线 */
+.table-scroll th { border-bottom-color: var(--line) !important; }
+.table-scroll thead th { color: var(--text-3) !important; }
+
+/* ---------- 个人中心：主题选择 ---------- */
+/* 页面给通用 button 写了 width:100%（本意是保存按钮），主题色块也是 button，
+   结果 6 个色块各占一整行。改成 3 列网格，6 个主题一屏内全部可见。 */
+.theme-options {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  gap: 10px !important;
+}
+.theme-swatch {
+  width: auto !important;
+  min-width: 0 !important;
+  padding: 10px 6px !important;
+  justify-content: center;
+  line-height: 1.2;
+}
+.theme-swatch .dot { flex-shrink: 0; }
+
+/* ===================================================================
+   PC 端布局（≥ 900px）
+   -------------------------------------------------------------------
+   900px 是「手机/平板竖屏」与「桌面」的分界：
+   低于它用底部 tabbar（拇指可达），高于它用左侧固定侧栏（鼠标习惯）。
+
+   导航两套 DOM 由 app.js 同时挂载，这里只做互斥显隐，
+   所以窗口拖拉跨过断点时不需要重新渲染，CSS 自己就切过去了。
+   =================================================================== */
+
+.sidenav { display: none; }
+
+@media (min-width: 900px) {
+
+  :root { --sidenav-w: 236px; }
+
+  /* 主内容让出侧栏宽度；底部不再需要给 tabbar 留白 */
+  body {
+    padding-left: var(--sidenav-w) !important;
+    padding-bottom: 0 !important;
+  }
+  /* 聊天室是 100vh 的 flex 布局，底栏没了就不用抬输入区 */
+  body:has(#input-area) { padding-bottom: 0 !important; }
+
+  .tabbar { display: none !important; }
+
+  /* ---------- 侧栏本体 ---------- */
+  .sidenav {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--sidenav-w);
+    padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg-2);
+    border-right: 1px solid var(--line);
+    z-index: 70;
+    overflow-y: auto;
+  }
+
+  .sn-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px 16px;
+  }
+  .sn-logo {
+    width: 34px; height: 34px;
+    flex: 0 0 34px;
+    border-radius: 10px;
+    background: var(--primary);
+    background-image: linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,0));
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    font-size: 17px;
+  }
+  .sn-brand-text { display: block; min-width: 0; }
+  .sn-brand-text b {
+    display: block;
+    font-size: 15px;
+    letter-spacing: .3px;
+    color: var(--text);
+    line-height: 1.2;
+  }
+  .sn-brand-text small {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    color: var(--text-3);
+  }
+
+  /* ---------- 导航项 ---------- */
+  .sn-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding-top: 4px;
+  }
+  .sn-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 10px 11px;
+    border: none;
+    border-radius: 11px;
+    background: none;
+    color: var(--text-2);
+    font-size: 14px;
+    font-family: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background .14s, color .14s;
+  }
+  .sn-item:hover { background: var(--card); color: var(--text); }
+  .sn-item.active {
+    background: var(--primary-light);
+    color: var(--primary);
+    font-weight: 600;
+  }
+  .sn-icon { width: 20px; height: 20px; flex: 0 0 20px; display: block; }
+  .sn-icon svg { width: 100%; height: 100%; display: block; }
+  .sn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* 发布按钮：侧栏里唯一的实心块，跟底栏的圆形 FAB 呼应 */
+  .sn-new {
+    justify-content: center;
+    margin: 8px 0 4px;
+    padding: 10px;
+    background: var(--primary);
+    background-image: linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,0));
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 8px 18px -8px var(--primary);
+  }
+  .sn-new:hover { background: var(--primary-dark); color: #fff; }
+
+  /* 分隔线：导航区 / 用户卡 */
+  .sn-user {
+    margin-top: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--card);
+  }
+  .sn-avatar {
+    width: 32px; height: 32px;
+    flex: 0 0 32px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    overflow: hidden;
+  }
+  .sn-avatar svg { width: 18px; height: 18px; }
+  .sn-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .sn-user-meta { flex: 1; min-width: 0; display: block; }
+  .sn-user-meta b {
+    display: block;
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sn-user-meta small {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--text-3);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sn-logout {
+    flex: 0 0 auto;
+    width: 30px; height: 30px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: none;
+    border-radius: 9px;
+    background: none;
+    color: var(--text-3);
+    cursor: pointer;
+    transition: background .14s, color .14s;
+  }
+  .sn-logout svg { width: 17px; height: 17px; }
+  .sn-logout:hover { background: var(--card-2); color: var(--danger, #ff5b6a); }
+
+  /* ---------- 内容区：宽屏下把单栏页面收窄、列表页放开 ---------- */
+  /* 帖子列表是网格，越宽越好；正文/表单类页面保持一栏，别拉成一片空白 */
+  .container.grid-2 { max-width: 1240px !important; }
+  .container { max-width: 880px; }
+  /* 管理后台是宽表格，别按正文宽度收着 */
+  body:has(.table-scroll) .container { max-width: 1180px; }
+  .wrap { max-width: 760px; }
+
+  /* 顶栏跟随主内容，不再横跨整屏 */
+  #header, .app-header { padding: 12px 22px !important; }
+
+  /* 聊天室：宽屏下把消息区和输入区一起收窄到 920px 居中。
+     用 padding 而不是 max-width，是为了让滚动条和输入区背景条仍然贴着窗口边缘。 */
+  #chat-box {
+    padding-left: max(20px, calc((100% - 920px) / 2)) !important;
+    padding-right: max(20px, calc((100% - 920px) / 2)) !important;
+  }
+  #input-area {
+    margin-bottom: 0 !important;
+    padding-left: max(10px, calc((100% - 920px) / 2)) !important;
+    padding-right: max(10px, calc((100% - 920px) / 2)) !important;
+  }
+
+  .grid-2 { gap: 16px; }
+}
+@media (min-width: 1400px) {
+  .container.grid-2 { max-width: 1420px !important; }
+}

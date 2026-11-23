@@ -539,8 +539,8 @@
   .preview-actions a { background: var(--primary); color: #fff; }
   .preview-actions button { background: #fff; color: #333; }
 </style>
-<script src="/theme.js"></script>
-<script src="/media.js"></script><link rel="stylesheet" href="/app.css"></head><body>
+<link rel="stylesheet" href="/app.css?v=20261123c"><script src="/theme.js?v=20261123c"></script>
+<script src="/media.js?v=20261123c"></script><script src="/app.js?v=20261123c"></script></head><body>
 <div id="header">
   <span class="title">519SB-Chat</span>
   <div class="right">
@@ -1101,14 +1101,7 @@ function appendMessage(data, prepend) {
     }
   } else if (data.type === 'voice') {
     bubbleDiv.classList.add('voice');
-    var vw = document.createElement('div');
-    vw.className = 'voice-bubble';
-    var au = document.createElement('audio');
-    au.controls = true;
-    au.preload = 'metadata';
-    au.src = '/image/' + data.text;
-    vw.appendChild(au);
-    bubbleDiv.appendChild(vw);
+    bubbleDiv.appendChild(buildVoicePlayer(data.text));
   } else if (data.type === 'file') {
     bubbleDiv.classList.add('file');
     bubbleDiv.appendChild(buildFileCard(data.text, data.fileName));
@@ -1268,6 +1261,148 @@ function buildAvatar(d, cls) {
  * 文件消息的下载卡片。
  * 服务端对 file 类型强制以附件下载，所以这里直接用链接，不需要额外的前端处理。
  */
+/* ==================== 语音气泡 ====================
+   不用原生 <audio controls>：它的时长不可信。
+
+   MediaRecorder 是边录边写的，WebM 头里的 Duration 是占位用的垃圾值
+   （实测能到 1.15e+59 这种量级）。桌面 Chrome 会按 Cluster 时间戳自己重算，
+   手机 Chrome 直接把那个值当真的，于是显示成 12:59:40 / 12:59:40。
+
+   这里改成自己画：把字节取回来用 WebAudio 解一遍，拿到真实时长再显示。
+   文件只有几十 KB，且用 IntersectionObserver 等气泡进视口才取，
+   一屏外的历史消息不会触发下载。
+   ================================================== */
+
+var VOICE_PLAY_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.2v13.6c0 .8.9 1.3 1.6.9l10.4-6.8a1 1 0 0 0 0-1.7L9.6 4.3A1 1 0 0 0 8 5.2Z"/></svg>';
+var VOICE_PAUSE_ICON = '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>';
+
+/* 注意函数名：本页另有一个 fmtDuration(ms) 是录音计时用的（接收毫秒），
+   同名会互相覆盖，这里必须换个名字，否则 2.1 秒会被当成 2.1 毫秒显示成 0:00。 */
+function fmtVoiceDuration(sec) {
+  if (!isFinite(sec) || sec < 0) return '--:--';
+  var s = Math.round(sec);
+  if (s >= 3600) {
+    return Math.floor(s / 3600) + ':' + pad2(Math.floor((s % 3600) / 60)) + ':' + pad2(s % 60);
+  }
+  return Math.floor(s / 60) + ':' + pad2(s % 60);
+}
+
+/** 用 WebAudio 解出真实时长；失败返回 0，交给调用方降级 */
+function decodeAudioDuration(blob) {
+  return new Promise(function (resolve) {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC || !blob.arrayBuffer) { resolve(0); return; }
+    blob.arrayBuffer().then(function (buf) {
+      var ctx;
+      try { ctx = new AC(); } catch (e) { resolve(0); return; }
+      var done = false;
+      function finish(v) {
+        if (done) return;
+        done = true;
+        try { ctx.close(); } catch (e) {}
+        resolve(v);
+      }
+      try {
+        ctx.decodeAudioData(buf, function (decoded) { finish(decoded.duration || 0); },
+                                  function () { finish(0); });
+      } catch (e) { finish(0); }
+    }).catch(function () { resolve(0); });
+  });
+}
+
+function buildVoicePlayer(mediaId) {
+  var src = '/image/' + encodeURIComponent(mediaId);
+
+  var wrap = document.createElement('div');
+  wrap.className = 'voice-bubble';
+
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'vb-btn';
+  btn.setAttribute('aria-label', '播放语音');
+  btn.innerHTML = VOICE_PLAY_ICON;
+
+  /* 波形条：高度用固定序列，避免每次刷新形状乱跳 */
+  var bars = document.createElement('span');
+  bars.className = 'vb-bars';
+  var heights = [40, 70, 52, 88, 62, 96, 55, 78, 45, 68, 50, 84];
+  for (var i = 0; i < heights.length; i++) {
+    var bar = document.createElement('i');
+    bar.style.height = heights[i] + '%';
+    bars.appendChild(bar);
+  }
+
+  var dur = document.createElement('span');
+  dur.className = 'vb-dur';
+  dur.textContent = '···';
+
+  wrap.appendChild(btn);
+  wrap.appendChild(bars);
+  wrap.appendChild(dur);
+
+  var audio = null;
+  var ready = null;
+
+  function load() {
+    if (ready) return ready;
+    ready = fetch(src)
+      .then(function (r) {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.blob();
+      })
+      .then(function (blob) {
+        /* 播放仍然用 /image/xxx 原地址：页面 CSP 是 media-src 'self'，
+           blob: 会被直接拦掉（控制台报 violated CSP），声音出不来。
+           这里只拿字节解出真实时长。 */
+        return decodeAudioDuration(blob).then(function (d) {
+          dur.textContent = d > 0 ? fmtVoiceDuration(d) : '语音';
+          return { url: src, dur: d };
+        });
+      })
+      .catch(function () {
+        dur.textContent = '语音';
+        return { url: src, dur: 0 };
+      });
+    return ready;
+  }
+
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      if (entries[0].isIntersecting) { io.disconnect(); load(); }
+    }, { rootMargin: '200px' });
+    io.observe(wrap);
+  } else {
+    setTimeout(load, 400);
+  }
+
+  btn.addEventListener('click', function () {
+    load().then(function (r) {
+      if (!audio) {
+        audio = new Audio(r.url);
+        audio.addEventListener('ended', function () {
+          btn.innerHTML = VOICE_PLAY_ICON;
+          bars.classList.remove('playing');
+        });
+      }
+      if (audio.paused) {
+        var pr = audio.play();
+        if (pr && pr.then) {
+          pr.then(function () {
+            btn.innerHTML = VOICE_PAUSE_ICON;
+            bars.classList.add('playing');
+          }).catch(function () {});
+        }
+      } else {
+        audio.pause();
+        btn.innerHTML = VOICE_PLAY_ICON;
+        bars.classList.remove('playing');
+      }
+    });
+  });
+
+  return wrap;
+}
+
 function buildFileCard(mediaId, fileName) {
   var name = fileName || '文件';
   var a = document.createElement('a');
@@ -1277,7 +1412,7 @@ function buildFileCard(mediaId, fileName) {
 
   var icon = document.createElement('span');
   icon.className = 'fc-icon';
-  icon.textContent = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></svg>';
+  icon.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></svg>';
 
   var meta = document.createElement('div');
   meta.className = 'fc-meta';
@@ -2143,12 +2278,17 @@ function cancelRecording() {
   stopRecording(false);
 }
 
+/* 语音按钮的原始图标。录音时按钮变成 ■，结束后要还原。
+   还原必须用 innerHTML —— 用 textContent 会把 SVG 标签当成纯文字显示出来，
+   按钮里就会糊着一串 <svg width="18" ...> 源码。 */
+var VOICE_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg>';
+
 function resetRecUi() {
   if (recTimer) { clearInterval(recTimer); recTimer = null; }
   if (recAutoStop) { clearTimeout(recAutoStop); recAutoStop = null; }
   var btn = document.getElementById('voice-btn');
   btn.classList.remove('recording');
-  btn.textContent = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg>';
+  btn.innerHTML = VOICE_ICON;
   btn.disabled = false;
   document.getElementById('rec-bar').classList.remove('show');
 }
@@ -2201,7 +2341,7 @@ function uploadAndSendVoice(blob) {
     } finally {
       sending = false;
       btn.disabled = false;
-      btn.textContent = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg>';
+      btn.innerHTML = VOICE_ICON;
       if (sendBtn) sendBtn.disabled = false;
     }
   };
@@ -2235,7 +2375,10 @@ function compressImage(file, maxWidth, callback) {  var reader = new FileReader(
 
 function doLogout() {
   if (!confirm('确定退出登录？')) return;
-  fetch('/api/logout?token=' + encodeURIComponent(TOKEN), { method: 'POST' }).finally(function () {
+  // 统一走共享层：服务端销毁会话 + 清本地登录态 + 跳登录页，
+  // 并且会通知其它标签页一起退出（不会再出现"退了还能进"）。
+  if (window.appLogout) { window.appLogout(); return; }
+  fetch('/api/logout?token=' + encodeURIComponent(TOKEN), { method: 'POST' }).finally(() => {
     localStorage.clear();
     location.href = '/login';
   });
@@ -2834,4 +2977,4 @@ document.getElementById('screen-hide-btn').onclick = function () {
   // 收起面板时如果不在分享，就顺便断开观看连接，避免白白占带宽
   if (!screenSharing) stopWatching();
 };
-</script><script src="/app.js"></script></body></html>
+</script></body></html>

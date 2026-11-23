@@ -115,6 +115,7 @@ public class ChatServer {
         server.createContext("/api/register",  wrap(authHandler::handleRegister, limiter, MAX_BODY_NORMAL));
         server.createContext("/api/login",     wrap(authHandler::handleLogin, limiter, MAX_BODY_NORMAL));
         server.createContext("/api/logout",    wrap(authHandler::handleLogout, limiter, MAX_BODY_NORMAL));
+        server.createContext("/api/session",   wrap(authHandler::handleSession, limiter, MAX_BODY_NORMAL));
 
         server.createContext("/chat",   wrap(chatHandler::handleIndex, limiter, MAX_BODY_NORMAL));
         server.createContext("/send",   wrap(chatHandler::handleSend, limiter, MAX_BODY_NORMAL));
@@ -154,7 +155,7 @@ public class ChatServer {
         //   theme.js  按 localStorage 里的配色偏好注入覆盖样式
         //   media.js  动态图识别与上传（聊天/帖子/评论共用）
         //   app.css   暗色视觉层（每页在 </head> 前引入）
-        //   app.js    底部导航栏注入（每页在 </body> 前引入）
+        //   app.js    登录态守卫 + 底部导航栏（每页在 </head> 内、页面脚本之前引入）
         for (String asset : new String[]{"theme.js", "media.js", "app.css", "app.js"}) {
             final String name = asset;
             server.createContext("/" + name, ex -> {

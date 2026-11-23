@@ -62,10 +62,11 @@
   }
   .pw-toggle:hover { background: none; color: var(--primary); }
   .pw-toggle.on { color: var(--primary); }
-</style><link rel="stylesheet" href="/app.css"></head><body>
+</style><link rel="stylesheet" href="/app.css?v=20261123c"></head><body>
 <div class="card">
   <h1>519SB 聊天室</h1>
   <p class="subtitle">登录后开始聊天</p>
+  <div id="login-notice" class="login-notice" style="display:none;"></div>
 
   <div class="tabs">
     <div class="tab active" data-tab="login">登录</div>
@@ -79,7 +80,7 @@
     <input type="text" id="login-user" placeholder="用户名" autocomplete="username">
     <div class="pw-wrap">
       <input type="password" id="login-pass" placeholder="密码" autocomplete="current-password">
-      <button type="button" class="pw-toggle" title="显示密码">👁</button>
+      <button type="button" class="pw-toggle" title="显示密码"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </div>
     <button onclick="doLogin()">登录</button>
   </div>
@@ -94,7 +95,7 @@
     <input type="password" id="reg-pass" placeholder="密码（6~50 位，含字母和数字）" autocomplete="new-password">
     <div class="pw-wrap">
       <input type="password" id="reg-pass2" placeholder="确认密码" autocomplete="new-password">
-      <button type="button" class="pw-toggle" title="显示密码">👁</button>
+      <button type="button" class="pw-toggle" title="显示密码"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></button>
     </div>
     <button onclick="doRegister()">注册并登录</button>
   </div>
@@ -200,7 +201,7 @@ function initPasswordToggles() {
       if (!input) return;
       var show = input.type === 'password';
       input.type = show ? 'text' : 'password';
-      btn.textContent = show ? '🙈' : '👁';
+      btn.innerHTML = show ? '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/><path d="m3 3 18 18"/></svg>' : '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
       btn.classList.toggle('on', show);
       btn.title = show ? '隐藏密码' : '显示密码';
       btn.setAttribute('aria-label', btn.title);
@@ -209,4 +210,18 @@ function initPasswordToggles() {
   });
 }
 initPasswordToggles();
+
+// 退出登录 / 会话失效后跳到这里，说明一下原因，避免用户以为"还在登录却进不去"
+(function () {
+  var reason = '';
+  try { reason = new URLSearchParams(location.search).get('reason') || ''; } catch (e) {}
+  var text = reason === 'logout' ? '你已退出登录，可以重新登录继续使用。'
+           : reason === 'expired' ? '登录状态已失效（可能在其它设备退出或会话超时），请重新登录。'
+           : '';
+  if (!text) return;
+  var box = document.getElementById('login-notice');
+  if (!box) return;
+  box.textContent = text;
+  box.style.display = 'block';
+})();
 </script></body></html>

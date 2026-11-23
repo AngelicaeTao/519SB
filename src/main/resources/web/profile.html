@@ -1,262 +1,476 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#141414">
 <title>个人中心 - 519SB 聊天室</title>
 <style>
-  /* ===== 主题变量：服务器按用户偏好注入覆盖块，默认即绿色 ===== */
-  :root {
-    --primary: #07c160;
-    --primary-dark: #06ad56;
-    --primary-light: #e8f7f0;
-    --primary-fade: #f0f9f4;
-  }
+  /* 颜色全部取自 /app.css 的设计 token；这里只定义页面布局，
+     不再自己写死绿/白色，换主题时整页跟着变。 */
+  :root { --danger: #ff5b6a; --danger-fade: rgba(255, 91, 106, 0.12); }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #e5e5e5; height: 100vh; overflow-y: auto; }
-  #header { background: #fff; padding: 12px 15px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
-  #header h1 { font-size: 16px; color: #333; }
-  #header a { font-size: 13px; color: var(--primary); text-decoration: none; padding: 6px 12px; border: 1px solid var(--primary); border-radius: 6px; }
-  #header a:hover { background: var(--primary); color: #fff; }
-  .container { max-width: 480px; margin: 20px auto; padding: 0 15px; }
-  .card { background: #fff; border-radius: 12px; padding: 24px 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
-  .card h2 { font-size: 15px; color: #333; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
-  .avatar-section { text-align: center; margin-bottom: 20px; }
-  .avatar-preview {
-    width: 100px; height: 100px; border-radius: 50%; background: var(--primary);
-    color: #fff; font-size: 40px; font-weight: bold; display: inline-flex;
-    align-items: center; justify-content: center; overflow: hidden;
-    cursor: pointer; transition: opacity 0.2s;
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    /* 关键修复：原先 height:100vh + overflow 把 body 变成内部滚动容器，
+       移动端地址栏收放时可视区变小，页面最后一块永远压在底栏下面。
+       改回正常文档流，底部留出「底栏高度 + 安全区 + 24px」的空隙。 */
   }
-  .avatar-preview:hover { opacity: 0.85; }
-  .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
-  .avatar-tip { font-size: 12px; color: #999; margin-top: 8px; }
-  .form-row { margin-bottom: 14px; }
-  .form-row label { display: block; font-size: 13px; color: #666; margin-bottom: 6px; }
-  .form-row input {
-    width: 100%; padding: 10px 12px; font-size: 15px;
-    border: 1px solid #ddd; border-radius: 8px; outline: none;
+
+  /* ===== 顶栏 ===== */
+  #header {
+    position: sticky; top: 0; z-index: 40;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 12px 16px;
+    background: rgba(20, 20, 20, 0.9);
+    -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--line);
   }
-  .form-row input:focus { border-color: var(--primary); }
-  .form-row input:disabled { background: #f5f5f5; color: #999; cursor: not-allowed; }
+  #header h1 { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
+  #header .back {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 6px 12px; border-radius: 999px;
+    background: var(--card-2); color: var(--text-2);
+    font-size: 12px; text-decoration: none;
+  }
+  #header .back:hover { background: var(--card-hover); color: var(--text); }
+
+  /* ===== 内容容器：底部必须留出底栏位置 ===== */
+  .wrap {
+    max-width: 520px; margin: 0 auto;
+    padding: 14px 14px calc(var(--tabbar-h, 60px) + 28px + env(safe-area-inset-bottom, 0px));
+    display: flex; flex-direction: column; gap: 14px;
+  }
+
+  /* ===== 用户横幅 ===== */
+  .hero {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px;
+    border: 1px solid var(--line); border-radius: 16px;
+    background:
+      radial-gradient(120% 140% at 0% 0%, var(--primary-light), transparent 62%),
+      var(--card);
+  }
+  .hero-avatar {
+    flex: none; width: 64px; height: 64px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--primary);
+    color: #fff; font-size: 26px; font-weight: 700;
+    border: none; padding: 0; overflow: hidden; cursor: pointer;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 6px 16px -6px var(--primary);
+  }
+  .hero-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .hero-avatar:active { opacity: .85; }
+  .hero-meta { min-width: 0; flex: 1; }
+  .hero-name {
+    font-size: 18px; font-weight: 700; line-height: 1.3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .hero-sub {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 4px; font-size: 12px; color: var(--text-3);
+  }
+  .badge {
+    padding: 1px 8px; border-radius: 999px;
+    background: var(--primary-light); color: var(--primary);
+    font-size: 11px; font-weight: 600;
+  }
+  .hero-tip { margin-top: 6px; font-size: 11px; color: var(--text-3); }
+
+  /* ===== 分组卡片 ===== */
+  .card {
+    border: 1px solid var(--line); border-radius: 14px;
+    background: var(--card); overflow: hidden;
+  }
+  .card-title {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px 4px;
+    font-size: 12px; font-weight: 600; color: var(--text-3); letter-spacing: .4px;
+  }
+  .card-title .extra { font-weight: 400; font-size: 11px; }
+
+  /* 设置行：左标题 + 右输入/值 */
+  .row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; min-height: 52px;
+    border-top: 1px solid var(--line);
+  }
+  .card-title + .row { border-top: none; }
+  .row-k { flex: none; width: 64px; font-size: 14px; color: var(--text-2); }
+  .row-input, .row-v {
+    flex: 1; min-width: 0;
+    font-size: 15px; text-align: right;
+    color: var(--text); background: transparent;
+    border: 0; outline: none; padding: 0;
+    font-family: inherit;
+  }
+  /* 覆盖 app.css 里给所有 input 的暗底方块，行内输入只需要文字。
+     app.css 用的是 input:not(...)×9，特异性高得离谱，只能靠 id 压过去。 */
+  #nickname {
+    background: transparent !important;
+    border: 0 !important; border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  #nickname:focus {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+  }
+  #nickname::placeholder { color: var(--text-3) !important; }
+  .row-v { color: var(--text-3); }
+  .row-lock { flex: none; font-size: 11px; color: var(--text-3); }
+
+  /* 卡片里的主按钮：与市面 App 一致 —— 通栏、44px、胶囊圆角。
+     选择器带 .card 前缀，是为了压过 app.css 里
+     那条通用 `button` 皮肤（它排在本 style 之后加载）。 */
+  .card-body { padding: 4px 16px 16px; }
+  .card .btn-primary,
+  .card .btn-secondary {
+    display: block; width: 100%; height: 44px;
+    border: none; border-radius: 999px;
+    font-size: 15px; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: opacity .15s, background .15s, transform .1s;
+  }
+  .card .btn-primary {
+    /* 用主色 + 顶部高光，而不是写死两色的渐变：
+       换主题时整颗按钮必须跟着变色（写死 #ff6ba3 会变成粉绿双色） */
+    background: var(--primary);
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0));
+    color: #fff;
+    box-shadow: 0 8px 18px -8px var(--primary);
+  }
+  .card .btn-primary:active { transform: scale(.985); }
+  .card .btn-primary:disabled {
+    background: var(--card-2); color: var(--text-3);
+    box-shadow: none; cursor: default;
+  }
+  .card .btn-secondary {
+    background: var(--card-2); color: var(--text-2);
+    border: 1px solid var(--line);
+  }
+  .card .btn-secondary:hover { background: var(--card-hover); color: var(--text); }
 
   /* ===== 历史昵称 ===== */
-  .nick-history { margin-top: 18px; padding-top: 14px; border-top: 1px solid #f0f0f0; }
-  .nick-history-head {
-    display: flex; align-items: center; justify-content: space-between;
-    font-size: 13px; color: #666; margin-bottom: 8px;
-  }
-  .nick-history-count { font-size: 12px; color: #999; }
-  .nick-list { font-size: 13px; }
+  .nick-list { padding: 0 16px 12px; }
   .nick-item {
     display: flex; align-items: center; gap: 8px;
-    padding: 6px 0; color: #333;
-    border-bottom: 1px dashed #f5f5f5;
+    padding: 7px 0; font-size: 13px; color: var(--text-2);
+    border-bottom: 1px dashed rgba(255, 255, 255, .06);
   }
   .nick-item:last-child { border-bottom: none; }
-  .nick-item .nick-name { flex: 1; word-break: break-all; }
-  .nick-item .nick-time { font-size: 11px; color: #999; white-space: nowrap; }
-  .nick-item.current { color: var(--primary); font-weight: 500; }
-  .nick-item.current::after {
-    content: '当前'; font-size: 10px; font-weight: normal;
-    background: var(--primary); color: #fff;
-    padding: 1px 6px; border-radius: 8px; margin-left: 6px;
+  .nick-item .nick-name {
+    flex: 1; min-width: 0; word-break: break-all;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .nick-empty { color: #999; font-size: 12px; padding: 6px 0; }
-  button {
-    width: 100%; padding: 11px; font-size: 15px; font-weight: 500;
-    background: var(--primary); color: #fff; border: none; border-radius: 8px;
-    cursor: pointer;
+  .nick-item .nick-time { flex: none; font-size: 11px; color: var(--text-3); }
+  .nick-item.current { color: var(--primary) !important; font-weight: 600; }
+  .nick-item.current .nick-name::after {
+    content: '当前'; margin-left: 6px; padding: 1px 6px;
+    border-radius: 999px; background: var(--primary-light);
+    font-size: 10px; font-weight: 500;
   }
-  button:hover { background: var(--primary-dark); }
-  button:disabled { background: #ccc; cursor: not-allowed; }
-  .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; display: none; }
-  .msg.show { display: block; }
-  .msg.error { background: #fee; color: #c33; }
-  .msg.success { background: #efe; color: #3a3; }
-  .msg.warn { background: #fff7e6; color: #d48806; border: 1px solid #ffe58f; }
+  .nick-empty { padding: 6px 16px 14px; font-size: 12px; color: var(--text-3); }
 
-  /* ===== 个性化配色 ===== */
-  .theme-options { display: flex; flex-wrap: wrap; gap: 10px; }
+  /* ===== 配色 ===== */
+  .theme-grid {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px; padding: 6px 16px 4px;
+  }
   .theme-swatch {
-    display: flex; flex-direction: column; align-items: center; gap: 6px;
-    padding: 10px 12px; border: 2px solid #eee; border-radius: 10px;
-    background: #fff; cursor: pointer; font-family: inherit;
-    font-size: 12px; color: #666; min-width: 74px;
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 12px 6px; width: 100%;
+    border: 1.5px solid var(--line); border-radius: 12px;
+    background: var(--card-2); color: var(--text-2);
+    font-size: 12px; font-family: inherit; cursor: pointer;
+    transition: border-color .15s, background .15s, color .15s;
   }
-  .theme-swatch:hover { border-color: #ccc; }
-  .theme-swatch.on { border-color: var(--primary); color: var(--primary); font-weight: 500; }
+  .theme-swatch:hover { border-color: #3a3a3a; }
   .theme-swatch .dot {
-    width: 26px; height: 26px; border-radius: 50%;
+    position: relative; width: 30px; height: 30px; border-radius: 50%;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
   }
-  .theme-swatch.on .dot { box-shadow: 0 0 0 3px var(--primary-light); }
-  .theme-tip { font-size: 12px; color: #999; margin-top: 10px; }
+  .theme-swatch .label {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .theme-swatch.on {
+    border-color: var(--primary); color: var(--primary);
+    background: var(--primary-fade);
+  }
+  .theme-swatch.on .dot::after {
+    content: '✓'; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 15px; font-weight: 700;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, .45);
+  }
+  .theme-tip { padding: 10px 16px 14px; font-size: 11px; color: var(--text-3); }
 
-  /* 密码框的显示/隐藏切换（样式需覆盖页面通用的全宽绿色 button） */
+  /* ===== 密码 ===== */
+  .pw-field { padding: 12px 16px 0; }
+  .pw-field:last-of-type { padding-bottom: 0; }
+  .pw-label { display: block; margin-bottom: 7px; font-size: 12px; color: var(--text-3); }
   .pw-wrap { position: relative; }
-  .pw-wrap input { padding-right: 42px; }
+  .pw-wrap input {
+    width: 100%; padding: 12px 46px 12px 14px;
+    font-size: 15px; font-family: inherit;
+    background: var(--card-2) !important;
+    border: 1px solid var(--line) !important;
+    border-radius: 10px !important;
+    color: var(--text) !important;
+  }
+  .pw-wrap input:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px var(--primary-light) !important;
+    background: var(--card-2) !important;
+  }
   .pw-toggle {
     position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
-    width: auto; padding: 4px 6px; font-size: 15px; line-height: 1;
-    background: none; border: none; border-radius: 6px;
-    color: #999; cursor: pointer;
+    width: 34px; height: 34px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; border-radius: 8px;
+    color: var(--text-3); cursor: pointer;
   }
-  .pw-toggle:hover { background: none; color: var(--primary); }
-  .pw-toggle.on { color: var(--primary); }
+  .pw-toggle:hover, .pw-toggle.on { color: var(--primary); }
+  .pw-toggle svg { width: 19px; height: 19px; }
+
+  /* ===== 退出登录 ===== */
+  .danger-card { border-color: rgba(255, 91, 106, .28); background: var(--card); }
+  .btn-logout {
+    display: block; width: 100%; padding: 15px 16px;
+    background: none; border: none; border-radius: 14px;
+    color: var(--danger); font-size: 15px; font-weight: 600; font-family: inherit;
+    cursor: pointer;
+  }
+  .btn-logout:hover { background: var(--danger-fade); }
+
+  /* 二次确认用底部动作面板（移动端惯例），比在卡片里就地展开更稳：
+     就地展开会把页面撑长，元素正好落在底栏下面。 */
+  .sheet-mask {
+    position: fixed; inset: 0; z-index: 90;
+    display: flex; align-items: flex-end;
+    background: rgba(0, 0, 0, .55);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+    animation: mask-in .18s ease-out;
+  }
+  .sheet-mask[hidden] { display: none; }
+  @keyframes mask-in { from { opacity: 0; } to { opacity: 1; } }
+  .sheet {
+    width: 100%; max-width: 520px; margin: 0 auto;
+    padding: 20px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    background: var(--card);
+    border-radius: 18px 18px 0 0;
+    border-top: 1px solid var(--line);
+    animation: sheet-up .22s cubic-bezier(.2, .9, .3, 1);
+  }
+  @keyframes sheet-up { from { transform: translateY(40px); opacity: .6; } to { transform: none; opacity: 1; } }
+  .sheet-title { font-size: 16px; font-weight: 700; text-align: center; }
+  .sheet-desc {
+    margin: 6px 0 18px; font-size: 13px; color: var(--text-3); text-align: center;
+  }
+  .sheet-actions { display: flex; flex-direction: column; gap: 10px; }
+  .sheet-actions .btn-secondary,
+  .sheet-actions .btn-danger {
+    display: block; width: 100%; height: 46px;
+    border: none; border-radius: 999px;
+    font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer;
+  }
+  .sheet-actions .btn-secondary {
+    background: var(--card-2); color: var(--text-2); border: 1px solid var(--line);
+  }
+  .sheet-actions .btn-danger { background: var(--danger); color: #fff; }
+
+  /* ===== 提示条 ===== */
+  .msg {
+    margin: 12px 16px 0; padding: 10px 14px;
+    border-radius: 10px; font-size: 13px; display: none;
+  }
+  .msg.show { display: block; }
+  .msg.error { background: var(--danger-fade); color: #ff8a95; }
+  .msg.success { background: rgba(55, 199, 144, .14); color: #5fe0a8; }
+  .msg.warn { background: rgba(255, 179, 0, .12); color: #ffc24d; }
+
+  #avatar-input { display: none; }
 </style>
-<script src="/theme.js"></script><link rel="stylesheet" href="/app.css"></head><body>
+<link rel="stylesheet" href="/app.css?v=20261123c"><script src="/theme.js?v=20261123c"></script>
+<script src="/app.js?v=20261123c"></script>
+</head><body>
+
 <div id="header">
   <h1>个人中心</h1>
-  <a href="/chat">返回聊天</a>
+  <a class="back" href="/chat">
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    返回聊天
+  </a>
 </div>
-<div class="container">
 
-  <div class="card">
-    <h2>头像和昵称</h2>
-    <div class="avatar-section">
-      <div class="avatar-preview" id="avatar-preview" onclick="document.getElementById('avatar-input').click()"></div>
-      <p class="avatar-tip">点击头像上传新头像</p>
-      <input type="file" id="avatar-input" accept="image/*" style="display: none;">
-    </div>
+<div class="wrap">
 
-    <div id="profile-msg" class="msg"></div>
-
-    <div class="form-row">
-      <label>账号（不可修改）</label>
-      <input type="text" id="username" disabled>
-    </div>
-    <div class="form-row">
-      <label>昵称</label>
-      <input type="text" id="nickname" placeholder="请输入昵称" maxlength="20">
-    </div>
-    <button id="save-btn" onclick="saveProfile()">保存修改</button>
-
-    <div class="nick-history">
-      <div class="nick-history-head">
-        <span>历史昵称</span>
-        <span class="nick-history-count" id="nick-count"></span>
+  <section class="hero">
+    <button type="button" class="hero-avatar" id="avatar-preview" title="更换头像"></button>
+    <div class="hero-meta">
+      <div class="hero-name" id="hero-name">加载中…</div>
+      <div class="hero-sub">
+        <span id="hero-account">@—</span>
+        <span class="badge" id="hero-badge" hidden>管理员</span>
       </div>
-      <div id="nick-list" class="nick-list">加载中...</div>
+      <div class="hero-tip">点击左侧头像可上传新头像</div>
     </div>
-  </div>
+  </section>
+  <input type="file" id="avatar-input" accept="image/*">
 
-  <div class="card">
-    <h2>个性化配色</h2>
+  <section class="card">
+    <div class="card-title">账号资料</div>
+    <div id="profile-msg" class="msg"></div>
+    <div class="row">
+      <span class="row-k">昵称</span>
+      <input class="row-input" type="text" id="nickname" placeholder="请输入昵称" maxlength="20">
+    </div>
+    <div class="row">
+      <span class="row-k">账号</span>
+      <span class="row-v" id="row-account">—</span>
+      <span class="row-lock">不可修改</span>
+    </div>
+    <div class="card-body">
+      <button class="btn-primary" id="save-btn" onclick="saveProfile()">保存修改</button>
+    </div>
+
+    <div class="card-title" style="padding-top:6px">
+      <span>历史昵称</span>
+      <span class="extra" id="nick-count"></span>
+    </div>
+    <div id="nick-list" class="nick-list">加载中…</div>
+  </section>
+
+  <section class="card">
+    <div class="card-title">个性化配色</div>
     <div id="theme-msg" class="msg"></div>
-    <div class="theme-options" id="theme-options">加载中...</div>
+    <div class="theme-grid" id="theme-options">
+      <span style="grid-column:1/-1;padding:8px 0;font-size:12px;color:var(--text-3)">加载中…</span>
+    </div>
     <p class="theme-tip">选好后所有页面统一生效</p>
-  </div>
+  </section>
 
-  <div class="card">
-    <h2>修改密码</h2>
+  <section class="card">
+    <div class="card-title">修改密码</div>
     <div id="pwd-msg" class="msg"></div>
-    <div class="form-row">
-      <label>旧密码</label>
+
+    <div class="pw-field">
+      <label class="pw-label" for="old-password">旧密码</label>
       <div class="pw-wrap">
         <input type="password" id="old-password" placeholder="请输入旧密码" autocomplete="current-password">
-        <button type="button" class="pw-toggle" title="显示密码">👁</button>
+        <button type="button" class="pw-toggle" title="显示密码" aria-label="显示密码"></button>
       </div>
     </div>
-    <div class="form-row">
-      <label>新密码</label>
+    <div class="pw-field">
+      <label class="pw-label" for="new-password">新密码</label>
       <div class="pw-wrap">
         <input type="password" id="new-password" placeholder="6~50 位，含字母和数字" autocomplete="new-password">
-        <button type="button" class="pw-toggle" title="显示密码">👁</button>
+        <button type="button" class="pw-toggle" title="显示密码" aria-label="显示密码"></button>
       </div>
     </div>
-    <div class="form-row">
-      <label>确认新密码</label>
+    <div class="pw-field">
+      <label class="pw-label" for="new-password2">确认新密码</label>
       <div class="pw-wrap">
         <input type="password" id="new-password2" placeholder="再次输入新密码" autocomplete="new-password">
-        <button type="button" class="pw-toggle" title="显示密码">👁</button>
+        <button type="button" class="pw-toggle" title="显示密码" aria-label="显示密码"></button>
       </div>
     </div>
-    <button onclick="changePassword()">修改密码</button>
-  </div>
+
+    <div class="card-body" style="padding-top:16px">
+      <button class="btn-primary" onclick="changePassword()">修改密码</button>
+    </div>
+  </section>
+
+  <section class="card danger-card">
+    <button class="btn-logout" id="logout-btn">退出登录</button>
+  </section>
 
 </div>
+
+<div class="sheet-mask" id="logout-sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="logout-title">
+    <p class="sheet-title" id="logout-title">退出登录</p>
+    <p class="sheet-desc">退出后需要重新登录才能继续使用</p>
+    <div class="sheet-actions">
+      <button class="btn-danger" id="logout-ok">确定退出</button>
+      <button class="btn-secondary" id="logout-cancel">取消</button>
+    </div>
+  </div>
+</div>
+
 <script>
-const TOKEN = localStorage.getItem('token');
-const USERNAME = localStorage.getItem('username') || '';
-if (!TOKEN) { location.href = '/login'; }
+/* app.js 已在 head 里同步执行：无 token 会立刻跳登录页，
+   之后任何 401 都会被它拦下来踢回登录页。这里的 TOKEN 不会是空的。 */
+var TOKEN = localStorage.getItem('token');
+var USERNAME = localStorage.getItem('username') || '';
 
-let currentAvatarId = localStorage.getItem('avatarId') || null;
-if (currentAvatarId === 'null') currentAvatarId = null;
-let currentNickname = localStorage.getItem('nickname') || USERNAME;
+var currentAvatarId = localStorage.getItem('avatarId');
+if (currentAvatarId === 'null' || currentAvatarId === 'undefined') currentAvatarId = null;
+var currentNickname = localStorage.getItem('nickname') || USERNAME;
 
-let isSaved = false;
+var isSaved = false;
+var nickDirty = false;
 
-document.getElementById('username').value = USERNAME;
-document.getElementById('nickname').value = currentNickname;
+/* ==================== 基本信息渲染 ==================== */
+
+function paintHero() {
+  document.getElementById('hero-name').textContent = currentNickname || USERNAME || '—';
+  document.getElementById('hero-account').textContent = '@' + (USERNAME || '—');
+  document.getElementById('hero-badge').hidden =
+    localStorage.getItem('isAdmin') !== 'true';
+  document.getElementById('row-account').textContent = USERNAME || '—';
+  renderAvatar();
+}
 
 function renderAvatar() {
-  const el = document.getElementById('avatar-preview');
+  var el = document.getElementById('avatar-preview');
   el.innerHTML = '';
   if (currentAvatarId) {
-    const img = document.createElement('img');
-    img.src = '/image/' + currentAvatarId;
+    var img = document.createElement('img');
+    img.src = '/image/' + encodeURIComponent(currentAvatarId);
+    img.alt = '';
     el.appendChild(img);
   } else {
-    el.textContent = (currentNickname || USERNAME).charAt(0).toUpperCase();
+    el.textContent = (currentNickname || USERNAME || '?').charAt(0).toUpperCase();
   }
 }
-renderAvatar();
+
+paintHero();
+document.getElementById('nickname').value = currentNickname;
+
+/* 服务端确认身份后刷新一次（本地缓存可能已过期或被改） */
+window.onSessionReady = function (d) {
+  USERNAME = d.username || USERNAME;
+  if (!nickDirty) {
+    currentNickname = d.nickname || d.username || currentNickname;
+    document.getElementById('nickname').value = currentNickname;
+  }
+  currentAvatarId = d.avatarId == null ? null : d.avatarId;
+  paintHero();
+};
+// app.js 校验可能比本脚本更早完成，补画一次
+if (window.appSession) window.onSessionReady(window.appSession);
 loadNicknameHistory();
 loadThemes();
 
-// 密码框显示/隐藏：切换 input.type，值仍走 element.value，切换后不丢内容
-function initPasswordToggles() {
-  document.querySelectorAll('.pw-toggle').forEach(function (btn) {
-    btn.addEventListener('click', function (e) {
-      e.preventDefault();
-      var input = btn.parentElement.querySelector('input');
-      if (!input) return;
-      var show = input.type === 'password';
-      input.type = show ? 'text' : 'password';
-      btn.textContent = show ? '🙈' : '👁';
-      btn.classList.toggle('on', show);
-      btn.title = show ? '隐藏密码' : '显示密码';
-      btn.setAttribute('aria-label', btn.title);
-      input.focus();
-    });
-  });
-}
-initPasswordToggles();
+/* ==================== 头像 ==================== */
 
-function showMsg(id, text, type) {
-  const el = document.getElementById(id);
-  el.textContent = text;
-  el.className = 'msg show ' + type;
-}
-function hideMsg(id) {
-  document.getElementById(id).className = 'msg';
-}
+document.getElementById('avatar-preview').onclick = function () {
+  document.getElementById('avatar-input').click();
+};
 
-function markDirty() {
-  if (isSaved) {
-    isSaved = false;
-    const btn = document.getElementById('save-btn');
-    btn.textContent = '保存修改';
-    btn.disabled = false;
-  }
-}
-function markSaved() {
-  isSaved = true;
-  const btn = document.getElementById('save-btn');
-  btn.textContent = '已保存';
-  btn.disabled = true;
-}
-
-document.getElementById('nickname').addEventListener('input', () => {
-  markDirty();
-  hideMsg('profile-msg');
-});
-
-document.getElementById('avatar-input').onchange = async (e) => {
-  const file = e.target.files[0];
+document.getElementById('avatar-input').onchange = function (e) {
+  var file = e.target.files[0];
   if (!file) return;
-  compressImage(file, 200, async (base64) => {
+  compressImage(file, 200, async function (base64) {
     try {
-      const res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=avatar', {
+      var res = await fetch('/image/upload?token=' + encodeURIComponent(TOKEN) + '&type=avatar', {
         method: 'POST',
         body: base64
       });
@@ -267,7 +481,7 @@ document.getElementById('avatar-input').onchange = async (e) => {
       currentAvatarId = (await res.text()).trim();
       renderAvatar();
       markDirty();
-      showMsg('profile-msg', '头像已上传，记得点下方"保存修改"', 'warn');
+      showMsg('profile-msg', '头像已上传，记得点下方「保存修改」', 'warn');
     } catch (err) {
       showMsg('profile-msg', '上传失败：' + err.message, 'error');
     }
@@ -275,26 +489,58 @@ document.getElementById('avatar-input').onchange = async (e) => {
   e.target.value = '';
 };
 
+/* ==================== 提示 / 按钮状态 ==================== */
+
+function showMsg(id, text, type) {
+  var el = document.getElementById(id);
+  el.textContent = text;
+  el.className = 'msg show ' + type;
+}
+function hideMsg(id) {
+  document.getElementById(id).className = 'msg';
+}
+
+function markDirty() {
+  if (isSaved) {
+    isSaved = false;
+    var btn = document.getElementById('save-btn');
+    btn.textContent = '保存修改';
+    btn.disabled = false;
+  }
+}
+function markSaved() {
+  isSaved = true;
+  var btn = document.getElementById('save-btn');
+  btn.textContent = '已保存';
+  btn.disabled = true;
+}
+
+document.getElementById('nickname').addEventListener('input', function () {
+  nickDirty = true;
+  markDirty();
+  hideMsg('profile-msg');
+});
+
 async function saveProfile() {
   if (isSaved) return;
-  const nickname = document.getElementById('nickname').value.trim();
+  var nickname = document.getElementById('nickname').value.trim();
   if (!nickname) { showMsg('profile-msg', '昵称不能为空', 'error'); return; }
   try {
-    const res = await fetch('/api/profile/update?token=' + encodeURIComponent(TOKEN), {
+    var res = await fetch('/api/profile/update?token=' + encodeURIComponent(TOKEN), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nickname, avatarId: currentAvatarId })
+      body: JSON.stringify({ nickname: nickname, avatarId: currentAvatarId })
     });
-    const r = await res.json();
+    var r = await res.json();
     if (r.ok) {
       currentNickname = r.nickname;
       currentAvatarId = r.avatarId;
       localStorage.setItem('nickname', r.nickname);
       localStorage.setItem('avatarId', r.avatarId == null ? 'null' : r.avatarId);
-      renderAvatar();
+      nickDirty = false;
+      paintHero();
       showMsg('profile-msg', '资料已保存', 'success');
       markSaved();
-      // 昵称可能改了，刷新历史列表让新记录立刻出现
       loadNicknameHistory();
     } else {
       showMsg('profile-msg', r.msg || '保存失败', 'error');
@@ -304,27 +550,25 @@ async function saveProfile() {
   }
 }
 
-// ==================== 历史昵称 ====================
+/* ==================== 历史昵称 ==================== */
 
-/** 相对时间：刚刚 / N 分钟前 / N 小时前 / N 天前 / 更早则显示具体日期 */
 function relTime(ms) {
   if (!ms || isNaN(ms)) return '';
-  const diff = Date.now() - ms;
+  var diff = Date.now() - ms;
   if (diff < 60000) return '刚刚';
   if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
   if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
   if (diff < 2592000000) return Math.floor(diff / 86400000) + ' 天前';
-  const d = new Date(ms);
+  var d = new Date(ms);
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
        + '-' + String(d.getDate()).padStart(2, '0');
 }
 
 async function loadNicknameHistory() {
-  const box = document.getElementById('nick-list');
-  const cnt = document.getElementById('nick-count');
+  var box = document.getElementById('nick-list');
   try {
-    const res = await fetch('/api/profile/nicknames?token=' + encodeURIComponent(TOKEN));
-    const r = await res.json();
+    var res = await fetch('/api/profile/nicknames?token=' + encodeURIComponent(TOKEN));
+    var r = await res.json();
     if (!r.ok) { box.textContent = r.msg || '加载失败'; return; }
     renderNicknameHistory(r.current, r.history || []);
   } catch (e) {
@@ -333,36 +577,34 @@ async function loadNicknameHistory() {
 }
 
 function renderNicknameHistory(current, history) {
-  const box = document.getElementById('nick-list');
-  const cnt = document.getElementById('nick-count');
+  var box = document.getElementById('nick-list');
+  var cnt = document.getElementById('nick-count');
   box.innerHTML = '';
 
-  // 当前昵称单独放一条（带"当前"标签），后面按时间倒序列出历史
-  const rows = [{ nickname: current, changedAt: 0, current: true }];
+  var rows = [{ nickname: current, changedAt: 0, current: true }];
   (history || []).forEach(function (h) { rows.push(h); });
 
-  const past = (history || []).length;
+  var past = (history || []).length;
   cnt.textContent = past > 0 ? past + ' 条记录' : '';
 
   if (!current && past === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'nick-empty';
-    empty.textContent = '还没有记录';
-    box.appendChild(empty);
+    box.textContent = '还没有记录';
+    box.className = 'nick-empty';
     return;
   }
+  box.className = 'nick-list';
 
   rows.forEach(function (h) {
-    const item = document.createElement('div');
+    var item = document.createElement('div');
     item.className = 'nick-item' + (h.current ? ' current' : '');
 
-    const name = document.createElement('span');
+    var name = document.createElement('span');
     name.className = 'nick-name';
     name.textContent = h.nickname || '(空)';
+    name.title = h.nickname || '';
 
-    const time = document.createElement('span');
+    var time = document.createElement('span');
     time.className = 'nick-time';
-    // 当前那条不显示时间（它没有"何时改成"的语义）
     time.textContent = h.current ? '' : relTime(h.changedAt);
 
     item.appendChild(name);
@@ -371,65 +613,87 @@ function renderNicknameHistory(current, history) {
   });
 }
 
-// ==================== 个性化配色 ====================
-let currentTheme = 'green';
-let themeList = [];
+/* ==================== 个性化配色 ==================== */
+var currentTheme = 'green';
+var themeList = [];
 
-/**
- * 把配色写进 localStorage。
- * theme.js 会在每个页面读取它并注入覆盖样式——
- * 服务端注入需要 URL 带 token，而普通链接进入的页面（如点"个人中心"）
- * 是不带的，那些页面只能靠这里。
- */
 function saveThemeLocal(name, vars) {
   try {
     localStorage.setItem('theme', name || 'green');
     if (name && name !== 'green' && vars) {
-      localStorage.setItem('themeVars', JSON.stringify(vars));
+      localStorage.setItem('themeVars2', JSON.stringify(vars));
     } else {
-      localStorage.removeItem('themeVars');
+      localStorage.removeItem('themeVars2');
     }
-  } catch (e) { /* 隐私模式下 localStorage 可能不可用，忽略 */ }
+  } catch (e) { /* 隐私模式下 localStorage 可能不可用 */ }
 }
 
-/** 按主题名从清单里取变量 */
 function varsOf(name) {
-  const t = themeList.find(function (x) { return x.name === name; });
-  return t ? t.vars : null;
+  for (var i = 0; i < themeList.length; i++) {
+    if (themeList[i].name === name) return themeList[i].vars;
+  }
+  return null;
+}
+
+/**
+ * 立刻把配色应用到当前页，不用刷新。
+ * theme.js 的覆盖块 id 固定，先删旧的再插新的，避免样式叠加残留。
+ */
+function applyThemeNow(vars) {
+  var old = document.getElementById('theme-override-client');
+  if (old) old.parentNode.removeChild(old);
+  if (!vars || !vars.primary) return;   // 默认配色：删掉覆盖块即还原
+  var css = ':root{--primary:' + vars.primary
+    + ';--primary-dark:' + (vars.dark || vars.primary)
+    + ';--primary-light:' + (vars.light || vars.primary)
+    + ';--primary-fade:' + (vars.fade || vars.primary) + ';}';
+  var el = document.createElement('style');
+  el.id = 'theme-override-client';
+  el.textContent = css;
+  document.head.appendChild(el);
 }
 
 async function loadThemes() {
-  const box = document.getElementById('theme-options');
+  var box = document.getElementById('theme-options');
   try {
-    const res = await fetch('/api/profile/theme?token=' + encodeURIComponent(TOKEN));
-    const r = await res.json();
-    if (!r.ok) { box.textContent = r.msg || '加载失败'; return; }
+    var res = await fetch('/api/profile/theme?token=' + encodeURIComponent(TOKEN));
+    var r = await res.json();
+    if (!r.ok) {
+      box.innerHTML = '<span style="grid-column:1/-1;font-size:12px;color:var(--text-3)">'
+        + (r.msg || '加载失败') + '</span>';
+      return;
+    }
     currentTheme = r.current || 'green';
     themeList = r.themes || [];
-    // 与服务端对齐一次：换设备或清过 localStorage 后也能拿回自己的配色
     saveThemeLocal(currentTheme, varsOf(currentTheme));
     renderThemes(themeList, currentTheme);
   } catch (e) {
-    box.textContent = '网络错误：' + e.message;
+    box.innerHTML = '<span style="grid-column:1/-1;font-size:12px;color:var(--text-3)">网络错误：'
+      + e.message + '</span>';
   }
 }
 
 function renderThemes(themes, active) {
-  const box = document.getElementById('theme-options');
+  var box = document.getElementById('theme-options');
   box.innerHTML = '';
+  // 当前生效的排第一个：卡片可视区域有限，排在后面用户会以为没选中
+  themes = themes.slice().sort(function (a, b) {
+    return (b.name === active ? 1 : 0) - (a.name === active ? 1 : 0);
+  });
   themes.forEach(function (t) {
-    const btn = document.createElement('button');
+    var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'theme-swatch' + (t.name === active ? ' on' : '');
     btn.title = t.label;
+    btn.setAttribute('aria-pressed', t.name === active ? 'true' : 'false');
 
-    const dot = document.createElement('span');
+    var dot = document.createElement('span');
     dot.className = 'dot';
     dot.style.background = t.color;
 
-    const label = document.createElement('span');
-    // 明确标出当前生效的那一个，避免"点了没反应"的困惑
-    label.textContent = (t.name === active ? '✓ ' : '') + t.label;
+    var label = document.createElement('span');
+    label.className = 'label';
+    label.textContent = t.label;
 
     btn.appendChild(dot);
     btn.appendChild(label);
@@ -440,53 +704,63 @@ function renderThemes(themes, active) {
 
 async function pickTheme(name) {
   if (name === currentTheme) return;
+  hideMsg('theme-msg');
+  // 先本地即时生效，网络失败再回滚，避免"点了半天没反应"
+  var vars = varsOf(name);
+  var prevTheme = currentTheme;
+  var prevVars = varsOf(prevTheme);
+  applyThemeNow(vars);
+  renderThemes(themeList, name);
+
   try {
-    const res = await fetch('/api/profile/theme?token=' + encodeURIComponent(TOKEN), {
+    var res = await fetch('/api/profile/theme?token=' + encodeURIComponent(TOKEN), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: name })
     });
-    const r = await res.json();
-    if (!r.ok) { showMsg('theme-msg', r.msg || '保存失败', 'error'); return; }
+    var r = await res.json();
+    if (!r.ok) throw new Error(r.msg || '保存失败');
     currentTheme = r.theme;
-    // 存进 localStorage，供 theme.js 在其它页面应用（那些页面 URL 不带 token）
     saveThemeLocal(r.theme, varsOf(r.theme));
-    showMsg('theme-msg', '配色已保存，正在应用...', 'success');
-    // 重新载入一次，让新配色覆盖当前页面的样式
-    setTimeout(function () { location.reload(); }, 400);
+    renderThemes(themeList, currentTheme);
+    showMsg('theme-msg', '配色已切换，所有页面同步生效', 'success');
+    setTimeout(function () { hideMsg('theme-msg'); }, 2000);
   } catch (e) {
-    showMsg('theme-msg', '网络错误：' + e.message, 'error');
+    currentTheme = prevTheme;
+    applyThemeNow(prevVars);
+    renderThemes(themeList, prevTheme);
+    showMsg('theme-msg', '切换失败：' + e.message, 'error');
   }
 }
 
+/* ==================== 修改密码 ==================== */
+
 async function changePassword() {
-  const oldPassword = document.getElementById('old-password').value;
-  const p1 = document.getElementById('new-password').value;
-  const p2 = document.getElementById('new-password2').value;
+  var oldPassword = document.getElementById('old-password').value;
+  var p1 = document.getElementById('new-password').value;
+  var p2 = document.getElementById('new-password2').value;
   if (!oldPassword) { showMsg('pwd-msg', '请输入旧密码', 'error'); return; }
   if (!p1) { showMsg('pwd-msg', '请输入新密码', 'error'); return; }
   if (p1 !== p2) { showMsg('pwd-msg', '两次输入的密码不一致', 'error'); return; }
   try {
-    const res = await fetch('/api/profile/changePassword?token=' + encodeURIComponent(TOKEN), {
+    var res = await fetch('/api/profile/changePassword?token=' + encodeURIComponent(TOKEN), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ oldPassword, newPassword: p1 })
+      body: JSON.stringify({ oldPassword: oldPassword, newPassword: p1 })
     });
-    const r = await res.json();
+    var r = await res.json();
     if (r.ok) {
       document.getElementById('old-password').value = '';
       document.getElementById('new-password').value = '';
       document.getElementById('new-password2').value = '';
       if (r.token) {
-        // 服务端已吊销全部旧会话并签发了新 token，存下后重载页面。
-        // 重载会带着新 token 重建 SSE 长连接，避免还挂着已失效的旧连接。
+        // 服务端已吊销旧会话并签发新 token，存下后重载重建 SSE 连接
         localStorage.setItem('token', r.token);
         showMsg('pwd-msg', r.msg || '密码修改成功', 'success');
-        setTimeout(() => location.reload(), 800);
+        setTimeout(function () { location.reload(); }, 800);
       } else {
-        // 服务端没能签发新 token，只能要求重新登录
         showMsg('pwd-msg', r.msg || '密码修改成功，请重新登录', 'success');
-        setTimeout(() => { localStorage.clear(); location.href = '/login'; }, 1200);
+        setTimeout(function () { window.appForceLogout('logout'); }, 1200);
       }
     } else {
       showMsg('pwd-msg', r.msg || '修改失败', 'error');
@@ -496,14 +770,62 @@ async function changePassword() {
   }
 }
 
+/* 密码显隐：切换 input.type，值不丢 */
+var EYE_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/></svg>';
+var EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12Z"/><circle cx="12" cy="12" r="2.6"/><path d="M4 20 20 4"/></svg>';
+
+document.querySelectorAll('.pw-toggle').forEach(function (btn) {
+  btn.innerHTML = EYE_OPEN;
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    var input = btn.parentElement.querySelector('input');
+    if (!input) return;
+    var show = input.type === 'password';
+    input.type = show ? 'text' : 'password';
+    btn.innerHTML = show ? EYE_OFF : EYE_OPEN;
+    btn.classList.toggle('on', show);
+    btn.title = show ? '隐藏密码' : '显示密码';
+    btn.setAttribute('aria-label', btn.title);
+    input.focus();
+  });
+});
+
+/* ==================== 退出登录 ==================== */
+var sheet = document.getElementById('logout-sheet');
+
+function openLogoutSheet() {
+  sheet.hidden = false;
+  document.body.style.overflow = 'hidden';
+}
+function closeLogoutSheet() {
+  sheet.hidden = true;
+  document.body.style.overflow = '';
+}
+
+document.getElementById('logout-btn').addEventListener('click', openLogoutSheet);
+document.getElementById('logout-cancel').addEventListener('click', closeLogoutSheet);
+sheet.addEventListener('click', function (e) {
+  if (e.target === sheet) closeLogoutSheet();   // 点遮罩关闭
+});
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && !sheet.hidden) closeLogoutSheet();
+});
+document.getElementById('logout-ok').addEventListener('click', function () {
+  var ok = document.getElementById('logout-ok');
+  ok.disabled = true;
+  ok.textContent = '正在退出…';
+  window.appLogout();
+});
+
+/* ==================== 图片压缩 ==================== */
 function compressImage(file, maxWidth, callback) {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      let width = img.width;
-      let height = img.height;
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    var img = new Image();
+    img.onload = function () {
+      var canvas = document.createElement('canvas');
+      var width = img.width;
+      var height = img.height;
       if (width > maxWidth) {
         height = Math.round(height * maxWidth / width);
         width = maxWidth;
@@ -517,4 +839,5 @@ function compressImage(file, maxWidth, callback) {
   };
   reader.readAsDataURL(file);
 }
-</script><script src="/app.js"></script></body></html>
+</script>
+</body></html>

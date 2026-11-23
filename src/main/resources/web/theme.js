@@ -10,7 +10,7 @@
  */
 (function () {
   var KEY_NAME = 'theme';
-  var KEY_VARS = 'themeVars';
+  var KEY_VARS = 'themeVars2';  // v2：浅色变量改为半透明，旧缓存作废
 
   function readLocal(key) {
     try { return localStorage.getItem(key); } catch (e) { return null; }

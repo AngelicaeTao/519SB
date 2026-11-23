@@ -200,6 +200,38 @@ public class AuthHandler {
     }
 
     /**
+     * GET /api/session?token=xxx —— 校验登录态并返回当前身份。
+     *
+     * 页面路由是纯静态 HTML，服务端不做鉴权（token 存在 localStorage 里，
+     * 服务端拿不到）。所以前端必须有一个权威的「我现在是不是真的登录着」的
+     * 判断来源，否则 token 失效后页面照样打开，用户会以为自己还在线。
+     *
+     * token 无效一律 401，前端据此清理本地状态并跳回登录页。
+     */
+    public void handleSession(HttpExchange ex) throws IOException {
+        if (HttpUtil.rejectWrongMethod(ex, "GET")) return;
+        String token = HttpUtil.getQueryParam(ex.getRequestURI().getQuery(), "token");
+        String username = sessions.getUser(token);
+        if (username == null) {
+            HttpUtil.sendJson(ex, 401, "{\"ok\":false,\"reason\":\"expired\",\"msg\":\"登录状态已失效\"}");
+            return;
+        }
+        User user = userStore.getUser(username);
+        if (user == null) {
+            sessions.removeSession(token);
+            HttpUtil.sendJson(ex, 401, "{\"ok\":false,\"reason\":\"gone\",\"msg\":\"账号不存在\"}");
+            return;
+        }
+        StringBuilder sb = new StringBuilder("{\"ok\":true");
+        sb.append(",\"username\":\"").append(HttpUtil.escapeJson(user.username)).append("\"")
+          .append(",\"nickname\":\"").append(HttpUtil.escapeJson(user.nickname)).append("\"")
+          .append(",\"avatarId\":").append(user.avatarId == null ? "null" : "\"" + HttpUtil.escapeJson(user.avatarId) + "\"")
+          .append(",\"isAdmin\":").append(user.isAdmin)
+          .append("}");
+        HttpUtil.sendJson(ex, 200, sb.toString());
+    }
+
+    /**
      * 账号格式校验：只允许数字、字母、下划线。
      *
      * 用显式的白名单扫描而不是正则，避免忽略大小写、Unicode 子集等问题；
