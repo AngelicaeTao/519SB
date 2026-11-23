@@ -457,6 +457,7 @@ public class ChatServer {
     private static HttpHandler wrapScreen(HttpHandler original, IpRateLimiter limiter, long maxBody) {
         return ex -> {
             String ip = getClientIp(ex);
+            String path = ex.getRequestURI().getPath();
 
             long contentLength = -1;
             String cl = ex.getRequestHeaders().getFirst("Content-Length");
@@ -469,6 +470,17 @@ public class ChatServer {
             }
 
             if (HttpUtil.rejectCrossSitePost(ex)) return;
+
+            // 观看流是长连接，和 SSE 同理：**不占并发额度**。
+            // 让长连接参与并发计数是个陷阱：客户端异常断开（刷新、关标签、断网）
+            // 时写线程可能一时半会退不出来，handler 也就迟迟不返回，
+            // 额度只进不出；攒满 30 个之后该 IP 的所有请求都被 429，
+            // 页面看起来就是卡死，而且刷新也不恢复。
+            // 观看人数本来就由 ScreenShareManager 自己的上限控制，不需要再占额度。
+            if (path.equals("/screen/stream")) {
+                original.handle(ex);
+                return;
+            }
 
             if (!limiter.enterConcurrent(ip)) {
                 HttpUtil.sendJson(ex, 429, "{\"ok\":false,\"msg\":\"并发请求过多，请稍后再试\"}");

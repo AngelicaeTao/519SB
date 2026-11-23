@@ -151,6 +151,15 @@ public class ScreenHandler {
             return;
         }
 
+        // 先读请求体，再做节流判断。
+        // 顺序不能反：提前返回而不读 body，残留的 JPEG 字节会留在这条
+        // keep-alive 连接里，被当成下一个请求的请求行解析，导致请求错乱/挂起。
+        byte[] jpeg = HttpUtil.readBodyBytes(ex, Config.SCREEN_MAX_FRAME_BYTES);
+        if (jpeg.length == 0) {
+            HttpUtil.sendText(ex, 400, "empty");
+            return;
+        }
+
         // 服务端节流：比目标帧率高出一半的帧直接丢弃。
         // 客户端因为掉帧重试、或有人手工灌请求时，不至于把带宽和 CPU 打满。
         long now = System.currentTimeMillis();
@@ -160,12 +169,6 @@ public class ScreenHandler {
             return;
         }
         lastFrameAt = now;
-
-        byte[] jpeg = HttpUtil.readBodyBytes(ex, Config.SCREEN_MAX_FRAME_BYTES);
-        if (jpeg.length == 0) {
-            HttpUtil.sendText(ex, 400, "empty");
-            return;
-        }
 
         if (!screen.publishFrame(username, jpeg)) {
             // 不是当前分享者：可能已经超时被自动释放了，告诉前端让它停下来
@@ -279,7 +282,12 @@ public class ScreenHandler {
             // 帧的写入由每个观看者专属的写线程负责；同一个 OutputStream 有两个
             // 写者会把 MJPEG 分块写串，而且一旦在这里写就可能被慢观看者卡住。
             // 首帧已经由 addViewer 塞进该观看者的邮箱了。
-            while (screen.isSharing()) {
+            //
+            // 退出条件必须包含 hasViewer：观看者刷新/关页面时写线程会把他从
+            // 名单里摘掉，如果这里只等「分享结束」，这条 handler 会一直空转，
+            // 它占用的并发额度也永远不归还 —— 额度耗尽后该 IP 所有请求都会 429，
+            // 页面表现就是卡死，而且刷新也不恢复。
+            while (screen.isSharing() && screen.hasViewer(os)) {
                 try {
                     Thread.sleep(200);
                 } catch (InterruptedException e) {

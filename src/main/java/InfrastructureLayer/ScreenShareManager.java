@@ -362,6 +362,18 @@ public class ScreenShareManager {
         return changed;
     }
 
+    /**
+     * 这个流是否还在观看名单里。
+     *
+     * 用途：观看流的 handler 不能只等「分享结束」才退出。
+     * 观看者刷新页面或关掉标签时，写线程会因写失败退出并 removeViewer，
+     * 但 handler 若还在 while 里空转，它占用的资源（以及并发额度）就一直不释放。
+     * handler 拿这个判断自己是否已经被摘掉，从而及时退出。
+     */
+    public boolean hasViewer(OutputStream os) {
+        return os != null && viewers.containsKey(os);
+    }
+
     public void removeViewer(OutputStream os) {
         if (os == null) return;
         Viewer v = viewers.remove(os);
@@ -394,7 +406,13 @@ public class ScreenShareManager {
         for (OutputStream os : viewers.keySet()) {
             Viewer v = viewers.get(os);
             if (v != null) v.close();
+            // 立刻从登记表摘除并让写线程自行收尾：
+            // 只 close 不摘除的话，停止分享后 viewerCount 仍是旧值，
+            // 广播出去的「观看 N 人」是错的，前端提示条也会停在错误状态上。
+            viewers.remove(os);
+            viewerEpoch.incrementAndGet();
         }
+        viewerCount.set(0);
     }
 
     /** 用于状态查询：谁在分享、几个观众 */

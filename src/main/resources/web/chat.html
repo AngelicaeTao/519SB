@@ -2717,8 +2717,11 @@ async function stopScreenShare(alreadyReleased) {
   if (screenWatching) stopWatching();
 
   if (!alreadyReleased) {
-    try { await fetch('/screen/stop?token=' + encodeURIComponent(TOKEN), { method: 'POST' }); }
-    catch (e) { /* 服务端有超时兜底，这里失败不影响 */ }
+    // 不 await：停止分享是本地必须立即生效的动作。
+    // 这条请求一旦排队或被限流卡住，用户看到的就是「点了停止没反应、页面卡死」。
+    // 通知服务端只是补一刀，服务端本来就有超时兜底，失败也不影响本地收尾。
+    fetch('/screen/stop?token=' + encodeURIComponent(TOKEN), { method: 'POST' })
+      .catch(function () { /* 失败由服务端超时兜底 */ });
   }
 
   screenSentFrames = 0;
