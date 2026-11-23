@@ -159,9 +159,9 @@ public class Config {
     /**
      * 某用途的媒体保留时长（毫秒）。返回 0 表示永久保留。
      *
-     * 只有聊天相关的（message/voice）会定期清理：聊天记录本身有条数上限，
-     * 消息被裁掉之后对应的媒体留着也没人看得到。
-     * 帖子图和评论图不清理——帖子和评论是长期存在的，图删了会变裂图。
+     * 默认全部永久保留：聊天里的图片、语音一旦发出去就不再回收，
+     * 避免"消息还在、图没了"的裂图。若确实需要控制体积，
+     * 在 config.properties 里用 image.retention.ms.* 覆盖即可（正数生效）。
      */
     public static long imageRetentionMs(String type) {
         String v = PROPS.getProperty("image.retention.ms." + type);
@@ -170,9 +170,7 @@ public class Config {
                 return Long.parseLong(v.trim());
             } catch (NumberFormatException ignored) {}
         }
-        if ("message".equals(type)) return 24L * 3600 * 1000;
-        if ("voice".equals(type)) return 7L * 24 * 3600 * 1000;
-        // 文件是用户有意分享的，永久保留
+        // 0 = 不清理。帖子图、评论图、文件本来就是永久，聊天图和语音也改为永久。
         return 0;
     }
 
