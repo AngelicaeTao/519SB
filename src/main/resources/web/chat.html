@@ -296,112 +296,158 @@
     right: 70px;
     top: 50%;
     transform: translateY(-50%);
-    width: 300px;
-    max-height: 72vh;
-    background: #fff;
-    border-radius: 12px;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.18);
+    width: min(320px, calc(100vw - 88px));
+    max-height: min(76vh, 620px);
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.55);
     display: none;
     flex-direction: column;
+    overflow: hidden;
     z-index: 40;
   }
-  #filter-panel.show { display: flex; }
+  #filter-panel.show { display: flex; animation: filterIn .16s ease-out; }
+  @keyframes filterIn {
+    from { opacity: 0; transform: translateY(-47%) scale(.985); }
+    to   { opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+
   .filter-header {
-    padding: 12px 16px;
+    padding: 12px 14px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 1px solid #f0f0f0;
-    font-weight: bold;
+    gap: 8px;
+    border-bottom: 1px solid var(--line);
+    font-weight: 700;
     font-size: 14px;
+    color: var(--text);
     flex-shrink: 0;
+  }
+  .filter-header .fh-left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .filter-header .fh-count {
+    font-size: 11px; font-weight: 500;
+    color: var(--text-3);
+    background: var(--card-2);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 8px;
+    white-space: nowrap;
+  }
+  .filter-header .fh-count.active {
+    color: var(--primary);
+    border-color: var(--primary);
+    background: var(--primary-fade);
   }
   .filter-header .filter-close {
     background: none; border: none;
     font-size: 20px; line-height: 1;
-    color: #999; cursor: pointer;
-    padding: 0 4px;
+    color: var(--text-3); cursor: pointer;
+    padding: 0 5px; border-radius: 6px;
+    transition: color .15s, background .15s;
   }
-  .filter-header .filter-close:hover { color: #333; }
+  .filter-header .filter-close:hover { color: var(--text); background: var(--card-2); }
 
-  .filter-body { flex: 1; padding: 8px 0; }
-  .filter-section { padding: 10px 16px; border-bottom: 1px solid #f7f7f7; }
+  .filter-body {
+    flex: 1;
+    padding: 4px 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  .filter-section { padding: 10px 14px; border-bottom: 1px solid var(--line); }
   .filter-section:last-child { border-bottom: none; }
   .filter-section .filter-title {
-    font-size: 12px; color: #999;
+    font-size: 12px; color: var(--text-3);
     margin-bottom: 8px;
     display: flex; align-items: center; justify-content: space-between;
   }
   .filter-section .filter-title .clear-btn {
     font-size: 11px; color: var(--primary); cursor: pointer;
     background: none; border: none; padding: 0;
+    opacity: 0; pointer-events: none;
+    transition: opacity .15s;
   }
+  .filter-section .filter-title .clear-btn.on { opacity: 1; pointer-events: auto; }
   .filter-section .filter-title .clear-btn:hover { text-decoration: underline; }
 
   .filter-options { display: flex; flex-wrap: wrap; gap: 6px; }
   .filter-options label {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border: 1px solid #e0e0e0;
-    border-radius: 14px;
+    gap: 5px;
+    padding: 5px 11px 5px 9px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
     font-size: 12px;
-    color: #555;
+    color: var(--text-2);
     cursor: pointer;
-    background: #fafafa;
+    background: var(--card-2);
     transition: all 0.15s;
     user-select: none;
   }
-  .filter-options label:hover { border-color: var(--primary); color: var(--primary); }
+  .filter-options label svg { width: 13px; height: 13px; opacity: .8; }
+  .filter-options label:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-fade); }
   .filter-options label input[type="checkbox"] {
     display: none;
   }
   .filter-options label.checked {
     background: var(--primary); color: #fff; border-color: var(--primary);
+    font-weight: 600;
+    box-shadow: 0 2px 10px var(--primary-light);
   }
+  .filter-options label.checked svg { opacity: 1; }
 
   .filter-actions {
-    padding: 10px 16px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
     display: flex;
     gap: 8px;
-    border-top: 1px solid #f0f0f0;
+    border-top: 1px solid var(--line);
     flex-shrink: 0;
   }
   .filter-actions button {
     flex: 1;
-    padding: 8px;
+    padding: 9px;
     font-size: 13px;
-    border-radius: 6px;
-    border: none;
+    border-radius: 9px;
+    border: 1px solid transparent;
     cursor: pointer;
     font-family: inherit;
+    font-weight: 500;
+    transition: all .15s;
   }
-  .filter-actions .reset { background: #f0f0f0; color: #333; }
-  .filter-actions .reset:hover { background: #e0e0e0; }
+  .filter-actions .reset { background: var(--card-2); color: var(--text-2); border-color: var(--line); }
+  .filter-actions .reset:hover { background: var(--card-hover); color: var(--text); }
+  .filter-actions .done { background: var(--primary); color: #fff; font-weight: 600; }
+  .filter-actions .done:hover { filter: brightness(1.08); }
 
   /* ===== 用户搜索 ===== */
   .user-search-wrap { position: relative; }
   .user-search-wrap input {
     width: 100%;
-    padding: 8px 10px;
+    padding: 9px 11px;
     font-size: 13px;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    background: var(--bg-2);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 9px;
     outline: none;
     font-family: inherit;
+    transition: border-color .15s, background .15s;
   }
-  .user-search-wrap input:focus { border-color: var(--primary); }
+  .user-search-wrap input::placeholder { color: var(--text-3); }
+  .user-search-wrap input:focus { border-color: var(--primary); background: var(--card-2); }
 
   #user-search-dropdown {
     position: absolute;
     left: 0; right: 0;
     top: 100%;
     margin-top: 4px;
-    background: #fff;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    background: var(--card-2);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.5);
     max-height: 180px;
     overflow-y: auto;
     display: none;
@@ -411,6 +457,7 @@
   .user-search-item {
     display: flex; align-items: center; gap: 8px;
     padding: 8px 10px; cursor: pointer; font-size: 13px;
+    color: var(--text);
   }
   .user-search-item:hover { background: var(--primary-fade); }
   .user-search-item .avatar {
@@ -423,21 +470,21 @@
   .user-search-item .nick {
     flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .user-search-item .uname { font-size: 11px; color: #999; }
+  .user-search-item .uname { font-size: 11px; color: var(--text-3); }
   .user-search-empty {
-    padding: 10px; font-size: 12px; color: #999; text-align: center;
+    padding: 10px; font-size: 12px; color: var(--text-3); text-align: center;
   }
 
   /* ===== 日期按钮 ===== */
   .date-picker-btn {
     width: 100%;
-    padding: 9px 12px;
+    padding: 10px 12px;
     font-size: 13px;
     font-family: inherit;
-    background: #fafafa;
-    color: #333;
-    border: 1px solid #e0e0e0;
-    border-radius: 8px;
+    background: var(--bg-2);
+    color: var(--text-2);
+    border: 1px solid var(--line);
+    border-radius: 9px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -446,6 +493,34 @@
     transition: all 0.15s;
   }
   .date-picker-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-fade); }
+
+  /* 小屏：面板铺满可用宽度，避免类型标签换行、与右侧浮动按钮挤在一起 */
+  @media (max-width: 600px) {
+    #filter-panel {
+      left: 10px;
+      right: 10px;
+      width: auto;
+      max-height: 72vh;
+    }
+    .filter-options { gap: 5px; }
+    .filter-options label { padding: 5px 10px 5px 8px; }
+  }
+
+  /* 触摸设备没有真正的 hover，点按后高亮会卡住，这里还原并给出按压反馈 */
+  @media (hover: none) {
+    .date-picker-btn:hover { border-color: var(--line); color: var(--text-2); background: var(--bg-2); }
+    .date-picker-btn:active { background: var(--primary-fade); border-color: var(--primary); color: var(--primary); }
+    .filter-options label:hover { border-color: var(--line); color: var(--text-2); background: var(--card-2); }
+    .filter-options label.checked:hover { border-color: var(--primary); color: #fff; background: var(--primary); }
+    .filter-options label:active { opacity: .82; }
+    .filter-actions .reset:hover { background: var(--card-2); color: var(--text-2); }
+    .filter-actions .done:hover { filter: none; }
+    .filter-actions button:active { opacity: .85; }
+    .cal-day:hover { background: transparent; color: var(--text-2); }
+    .cal-day.has-data:hover { background: var(--primary-fade); color: var(--primary); }
+    .cal-day:active { background: var(--primary); color: #fff; }
+    .calendar-footer button:hover { background: var(--card-2); color: var(--text-2); }
+  }
 
   /* ===== 日历弹窗 ===== */
   .calendar-mask {
@@ -458,12 +533,15 @@
   }
   .calendar-mask.show { display: flex; }
   .calendar {
-    background: #fff;
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--line);
     border-radius: 14px;
     padding: 18px;
     width: 100%;
     max-width: 320px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.25);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    color-scheme: dark;
   }
   .calendar-header {
     display: flex; align-items: center; justify-content: space-between;
@@ -471,61 +549,66 @@
   }
   .calendar-header button {
     background: none; border: none; cursor: pointer;
-    font-size: 18px; color: #666; padding: 4px 10px;
+    font-size: 18px; color: var(--text-2); padding: 4px 10px;
     border-radius: 6px; font-family: inherit;
+    transition: background .15s, color .15s;
   }
-  .calendar-header button:hover { background: #f0f0f0; }
+  .calendar-header button:hover { background: var(--card-2); color: var(--text); }
   /* 年、月用原生下拉选择：支持键盘直接输入年份、滚轮浏览，比点网格快得多 */
   .cal-pick {
-    background: #fff; border: 1px solid #ddd; cursor: pointer; font-family: inherit;
-    font-size: 15px; font-weight: 500; color: #333;
+    background: var(--bg-2); border: 1px solid var(--line); cursor: pointer; font-family: inherit;
+    font-size: 15px; font-weight: 500; color: var(--text);
     padding: 4px 6px; border-radius: 6px; outline: none;
   }
   .cal-pick:hover { border-color: var(--primary); color: var(--primary); }
   .cal-pick:focus { border-color: var(--primary); }
   .calendar-weekdays {
     display: grid; grid-template-columns: repeat(7, 1fr);
-    text-align: center; font-size: 12px; color: #999;
+    text-align: center; font-size: 12px; color: var(--text-3);
     margin-bottom: 6px;
   }
   .calendar-days {
     display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px;
   }
-  /* 所有日期都可点：有消息的加绿底作为提示，没消息的点了会明确告知，
+  /* 所有日期都可点：有消息的加主色浅底作为提示，没消息的点了会明确告知，
      而不是像以前那样直接禁用（想点都点不到） */
   .cal-day {
     aspect-ratio: 1;
     display: flex; align-items: center; justify-content: center;
     font-size: 13px;
     border-radius: 8px;
-    color: #333;
+    color: var(--text-2);
     cursor: pointer;
+    border: 1px solid transparent;
+    transition: background .15s, color .15s;
   }
-  .cal-day:hover { background: #e8f5ee; }
+  .cal-day:hover { background: var(--card-2); color: var(--text); }
   .cal-day.has-data {
-    background: var(--primary-fade); font-weight: 500;
+    background: var(--primary-fade); color: var(--primary); font-weight: 600;
   }
   .cal-day.has-data:hover { background: var(--primary); color: #fff; }
-  .cal-day.other-month { color: #ddd; }
-  .cal-day.other-month:hover { background: #f5f5f5; }
+  .cal-day.today { border-color: var(--primary); }
+  .cal-day.other-month { color: var(--text-3); opacity: .4; }
+  .cal-day.other-month:hover { background: var(--card-2); opacity: 1; }
   .calendar-footer {
     margin-top: 12px; display: flex; justify-content: flex-end;
   }
   .calendar-footer button {
     padding: 7px 18px; font-size: 13px;
-    border: none; border-radius: 6px;
-    background: #f0f0f0; color: #333;
+    border: 1px solid var(--line); border-radius: 8px;
+    background: var(--card-2); color: var(--text-2);
     cursor: pointer; font-family: inherit;
+    transition: all .15s;
   }
-  .calendar-footer button:hover { background: #e0e0e0; }
+  .calendar-footer button:hover { background: var(--card-hover); color: var(--text); }
 
   /* ===== 定位到某条消息时的高亮 ===== */
   .msg.highlight-flash .bubble {
     animation: flashHighlight 1.8s ease-out;
   }
   @keyframes flashHighlight {
-    0%   { box-shadow: 0 0 0 4px rgba(7,193,96,0.9); }
-    100% { box-shadow: 0 0 0 0 rgba(7,193,96,0); }
+    0%   { box-shadow: 0 0 0 3px var(--primary), 0 0 26px var(--primary-light); }
+    100% { box-shadow: 0 0 0 0 transparent; }
   }
 
   #image-preview { position: fixed; inset: 0; background: rgba(0,0,0,0.92); display: none; align-items: center; justify-content: center; z-index: 999; padding: 20px; overflow: hidden; }
@@ -539,8 +622,8 @@
   .preview-actions a { background: var(--primary); color: #fff; }
   .preview-actions button { background: #fff; color: #333; }
 </style>
-<link rel="stylesheet" href="/app.css?v=20261123c"><script src="/theme.js?v=20261123c"></script>
-<script src="/media.js?v=20261123c"></script><script src="/app.js?v=20261123c"></script></head><body>
+<link rel="stylesheet" href="/app.css?v=20261123d"><script src="/theme.js?v=20261123d"></script>
+<script src="/media.js?v=20261123d"></script><script src="/app.js?v=20261123d"></script></head><body>
 <div id="header">
   <span class="title">519SB-Chat</span>
   <div class="right">
@@ -596,14 +679,17 @@
   <div id="filter-mask" onclick="closeFilter()"></div>
   <div id="filter-panel">
     <div class="filter-header">
-      <span>筛选消息</span>
-      <button class="filter-close" onclick="closeFilter()">×</button>
+      <div class="fh-left">
+        <span>筛选消息</span>
+        <span class="fh-count" id="filter-count">全部</span>
+      </div>
+      <button class="filter-close" onclick="closeFilter()" title="关闭">×</button>
     </div>
     <div class="filter-body">
       <div class="filter-section">
         <div class="filter-title">
-          <span>搜索用户</span>
-          <button class="clear-btn" onclick="clearUserSearch()">清空</button>
+          <span>按用户</span>
+          <button class="clear-btn" id="clear-user-btn" onclick="clearUserSearch()">清空</button>
         </div>
         <div class="user-search-wrap">
           <div id="user-search-dropdown"></div>
@@ -616,23 +702,27 @@
           <span>跳转到日期</span>
         </div>
         <button type="button" class="date-picker-btn" onclick="openCalendar()">
-          📅 选择年月日
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 11h18"/></svg>
+          选择年月日
         </button>
       </div>
 
       <div class="filter-section">
         <div class="filter-title">
           <span>按类型</span>
-          <button class="clear-btn" onclick="clearSection('filter-type-list')">清空</button>
+          <button class="clear-btn" id="clear-type-btn" onclick="clearSection('filter-type-list')">清空</button>
         </div>
         <div class="filter-options" id="filter-type-list">
-          <label data-value="text"><input type="checkbox">文字</label>
-          <label data-value="image"><input type="checkbox">图片</label>
+          <label data-value="text"><input type="checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 6h16M4 12h12M4 18h8"/></svg>文字</label>
+          <label data-value="image"><input type="checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4.5 4.5L17 13l3 3"/></svg>图片</label>
+          <label data-value="voice"><input type="checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3.5"/></svg>语音</label>
+          <label data-value="file"><input type="checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z"/><path d="M14 3v5h5"/></svg>文件</label>
         </div>
       </div>
     </div>
     <div class="filter-actions">
       <button class="reset" onclick="resetFilters()">重置</button>
+      <button class="done" onclick="closeFilter()">完成</button>
     </div>
   </div>
 </div>
@@ -1489,6 +1579,7 @@ function openFilter() {
   filterPanel.classList.add('show');
   filterMask.classList.add('show');
   btnFilter.classList.add('active');
+  updateFilterBadge();
 }
 
 function closeFilter() {
@@ -1713,6 +1804,9 @@ document.querySelectorAll('#filter-type-list label').forEach(function (label) {
   };
 });
 
+// 一个筛选标签可能覆盖多种底层类型：「图片」同时包含动图（anim）
+var TYPE_ALIAS = { image: ['image', 'anim'] };
+
 function matchMessage(msg) {
   var typeFilter = getCheckedValues(document.getElementById('filter-type-list'));
   var q = userSearchInput.value.trim();
@@ -1720,7 +1814,13 @@ function matchMessage(msg) {
 
   if (typeFilter.length === 0 && !hasUserFilter) return true;
 
-  if (typeFilter.length > 0 && typeFilter.indexOf(msg.dataset.type) < 0) return false;
+  if (typeFilter.length > 0) {
+    var mt = msg.dataset.type || 'text';
+    var hit = typeFilter.some(function (v) {
+      return (TYPE_ALIAS[v] || [v]).indexOf(mt) >= 0;
+    });
+    if (!hit) return false;
+  }
 
   if (hasUserFilter) {
     if (selectedUserFilter !== null) {
@@ -1750,11 +1850,14 @@ function applyFilters() {
     if (anyFilter) applyFiltersToElement(msg);
     else msg.style.display = '';
   });
+
+  updateFilterBadge();
 }
 
 function updateFilterBadge() {
-  var n = getCheckedValues(document.getElementById('filter-type-list')).length;
-  if (selectedUserFilter !== null || userSearchInput.value.trim().length > 0) n++;
+  var typeVals = getCheckedValues(document.getElementById('filter-type-list'));
+  var hasUser = selectedUserFilter !== null || userSearchInput.value.trim().length > 0;
+  var n = typeVals.length + (hasUser ? 1 : 0);
 
   var oldBadge = btnFilter.querySelector('.badge');
   if (oldBadge) oldBadge.remove();
@@ -1763,6 +1866,28 @@ function updateFilterBadge() {
     badge.className = 'badge';
     badge.textContent = n;
     btnFilter.appendChild(badge);
+  }
+
+  // 该区没有选择时把「清空」收起来，避免三个"清空"同时出现
+  var cu = document.getElementById('clear-user-btn');
+  if (cu) cu.classList.toggle('on', hasUser);
+  var ct = document.getElementById('clear-type-btn');
+  if (ct) ct.classList.toggle('on', typeVals.length > 0);
+
+  // 面板标题旁显示当前命中条数
+  var cnt = document.getElementById('filter-count');
+  if (cnt) {
+    if (n === 0) {
+      cnt.textContent = '全部';
+      cnt.classList.remove('active');
+    } else {
+      var visible = 0;
+      chatBox.querySelectorAll('.msg').forEach(function (m) {
+        if (m.style.display !== 'none') visible++;
+      });
+      cnt.textContent = visible + ' 条';
+      cnt.classList.add('active');
+    }
   }
 }
 
@@ -1881,13 +2006,19 @@ function renderCalendar() {
   var daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   var prevMonthDays = new Date(calYear, calMonth, 0).getDate();
 
+  var now0 = new Date();
+  var todayStr = now0.getFullYear() + '-' + pad2(now0.getMonth() + 1) + '-' + pad2(now0.getDate());
+
   function dayCell(day, monthOffset, isOtherMonth) {
     var y = calYear, m = calMonth + monthOffset;
     if (m < 0) { m = 11; y--; }
     if (m > 11) { m = 0; y++; }
     var dateStr = y + '-' + pad2(m + 1) + '-' + pad2(day);
     var el = document.createElement('div');
-    el.className = 'cal-day' + (isOtherMonth ? ' other-month' : '') + (available[dateStr] ? ' has-data' : '');
+    el.className = 'cal-day'
+      + (isOtherMonth ? ' other-month' : '')
+      + (available[dateStr] ? ' has-data' : '')
+      + (dateStr === todayStr ? ' today' : '');
     el.textContent = day;
     el.title = dateStr;
     (function (ds) { el.onclick = function () { jumpToDate(ds); }; })(dateStr);
