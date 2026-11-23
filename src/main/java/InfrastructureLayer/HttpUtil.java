@@ -2,6 +2,7 @@ package InfrastructureLayer;
 
 import com.sun.net.httpserver.HttpExchange;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.zip.GZIPOutputStream;
 
 /** HTTP 工具：query 解析、响应输出、JSON 简单处理 */
 public class HttpUtil {
@@ -183,6 +185,98 @@ public class HttpUtil {
         TrafficMonitor.accountOut(ex, bytes.length);
     }
 
+    /**
+     * 小于此长度不做压缩。
+     *
+     * 几十字节的响应压完反而更大（gzip 头尾约 20 字节），
+     * 还要多一次 CPU 与一次解压，纯亏。
+     */
+    private static final int GZIP_MIN_BYTES = 1024;
+
+    /**
+     * 文本响应统一出口：按需 gzip + 打缓存头。
+     *
+     * 压缩的动机：经公网隧道访问时，带宽往往只有几十 KB/s，
+     * 而 chat.html 未压缩就有 113 KB。HTML/CSS/JS 的压缩率普遍在 70%~85%，
+     * 同一份字节数下首屏时间能差三四倍。
+     *
+     * 只在客户端明确支持 gzip 时才压：HTTP/1.0 的老客户端、
+     * 以及少数不声明 Accept-Encoding 的抓取工具拿到压缩体就解不开。
+     */
+    private static void sendTextBody(HttpExchange ex, int status, byte[] bytes,
+                                     String contentType, String cacheControl) throws IOException {
+        applySecurityHeaders(ex);
+        ex.getResponseHeaders().set("Content-Type", contentType);
+        if (cacheControl != null) ex.getResponseHeaders().set("Cache-Control", cacheControl);
+
+        byte[] payload = bytes;
+        if (bytes.length >= GZIP_MIN_BYTES && acceptsGzip(ex)) {
+            byte[] gz = gzip(bytes);
+            // 压缩后更大（已是压缩格式或高熵内容）就发原文，别做负优化
+            if (gz.length < bytes.length) {
+                payload = gz;
+                ex.getResponseHeaders().set("Content-Encoding", "gzip");
+            }
+        }
+        // Vary 必须带：同一 URL 对不同 Accept-Encoding 会返回不同字节，
+        // 不说清楚会让中间缓存把压缩体发给不支持 gzip 的客户端（强缓存下尤其致命）。
+        ex.getResponseHeaders().add("Vary", "Accept-Encoding");
+
+        // 长度为 0 时传 -1 走 chunked：sendResponseHeaders 收到 0 会按"无响应体"处理
+        ex.sendResponseHeaders(status, payload.length == 0 ? -1 : payload.length);
+        try (OutputStream os = ex.getResponseBody()) {
+            writeOut(ex, os, payload);
+        }
+    }
+
+    /** Accept-Encoding 里是否含 gzip（q=0 视为拒绝） */
+    private static boolean acceptsGzip(HttpExchange ex) {
+        String ae = ex.getRequestHeaders().getFirst("Accept-Encoding");
+        if (ae == null || ae.isEmpty()) return false;
+        for (String part : ae.split(",")) {
+            String s = part.trim().toLowerCase();
+            int semi = s.indexOf(';');
+            String coding = (semi < 0 ? s : s.substring(0, semi)).trim();
+            if (!"gzip".equals(coding) && !"*".equals(coding)) continue;
+            if (semi >= 0 && s.substring(semi + 1).replace(" ", "").contains("q=0")) continue;
+            return true;
+        }
+        return false;
+    }
+
+    private static byte[] gzip(byte[] data) {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream(Math.max(64, data.length / 4));
+        try (GZIPOutputStream gz = new GZIPOutputStream(bos, 8192)) {
+            gz.write(data);
+        } catch (IOException e) {
+            return data;   // 压缩失败就直发原文，不影响可用性
+        }
+        byte[] out = bos.toByteArray();
+        return out.length == 0 ? data : out;
+    }
+
+    /**
+     * 静态资源的缓存策略：带版本号就长缓存，否则回源确认。
+     *
+     * 页面引用统一写成 `app.css?v=20261123d`。只要有 `v=` 参数，
+     * 说明这次引用的是一份确定的字节，改文件时必然改版本号，
+     * 因此可以放心让浏览器一年内不再问服务器。
+     *
+     * 没有版本号的引用（比如直接在地址栏敲 /app.css）保持 no-cache：
+     * 允许存副本但每次回源确认，避免"改完样式刷新看不到变化"。
+     */
+    private static String staticCacheControl(HttpExchange ex) {
+        String query = ex.getRequestURI().getQuery();
+        if (query != null) {
+            for (String part : query.split("&")) {
+                if (part.startsWith("v=") && part.length() > 2) {
+                    return "public, max-age=31536000, immutable";
+                }
+            }
+        }
+        return "no-cache";
+    }
+
     private static void applySecurityHeaders(HttpExchange ex) {        ex.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         ex.getResponseHeaders().set("X-Frame-Options", "DENY");
         ex.getResponseHeaders().set("Referrer-Policy", "same-origin");
@@ -202,16 +296,11 @@ public class HttpUtil {
 
     /** 返回 HTML 响应 */
     public static void sendHtml(HttpExchange ex, int status, String html) throws IOException {
-        applySecurityHeaders(ex);
         // 页面会按用户配色/资料变化，禁止缓存。
         // 否则浏览器会按启发式规则缓存旧副本，出现"设置改了但页面没变"。
-        ex.getResponseHeaders().set("Cache-Control", "no-store, no-cache, must-revalidate");
-        byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
-        ex.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
-        ex.sendResponseHeaders(status, bytes.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            writeOut(ex, os, bytes);
-        }
+        // 压缩仍然有效：no-store 只约束存储，不约束传输。
+        sendTextBody(ex, status, html.getBytes(StandardCharsets.UTF_8),
+                "text/html; charset=utf-8", "no-store, no-cache, must-revalidate");
     }
 
     /**
@@ -240,32 +329,14 @@ public class HttpUtil {
      * 可以缓存——它不带用户数据，是靠浏览器端的 localStorage 决定行为的。
      */
     public static void sendJs(HttpExchange ex, int status, String js) throws IOException {
-        applySecurityHeaders(ex);
-        ex.getResponseHeaders().set("Content-Type", "application/javascript; charset=utf-8");
-        // 不设 max-age：这些文件没有版本号，设了强缓存后用户端会拿着一小时前的
-        // 旧 app.js / app.css，改完样式刷新也看不到变化。no-cache 允许存副本，
-        // 但每次必须回源确认，几十 KB 的静态资源不值得为它牺牲"改了就生效"。
-        ex.getResponseHeaders().set("Cache-Control", "no-cache");
-        byte[] bytes = js.getBytes(StandardCharsets.UTF_8);
-        ex.sendResponseHeaders(status, bytes.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            writeOut(ex, os, bytes);
-        }
+        sendTextBody(ex, status, js.getBytes(StandardCharsets.UTF_8),
+                "application/javascript; charset=utf-8", staticCacheControl(ex));
     }
 
     /** 返回静态 CSS 资源（与 JS 一样可缓存，不含用户数据） */
     public static void sendCss(HttpExchange ex, int status, String css) throws IOException {
-        applySecurityHeaders(ex);
-        ex.getResponseHeaders().set("Content-Type", "text/css; charset=utf-8");
-        // 不设 max-age：这些文件没有版本号，设了强缓存后用户端会拿着一小时前的
-        // 旧 app.js / app.css，改完样式刷新也看不到变化。no-cache 允许存副本，
-        // 但每次必须回源确认，几十 KB 的静态资源不值得为它牺牲"改了就生效"。
-        ex.getResponseHeaders().set("Cache-Control", "no-cache");
-        byte[] bytes = css.getBytes(StandardCharsets.UTF_8);
-        ex.sendResponseHeaders(status, bytes.length);
-        try (OutputStream os = ex.getResponseBody()) {
-            writeOut(ex, os, bytes);
-        }
+        sendTextBody(ex, status, css.getBytes(StandardCharsets.UTF_8),
+                "text/css; charset=utf-8", staticCacheControl(ex));
     }
 
     /** 返回 JSON 响应（带敏感数据，禁止缓存） */
